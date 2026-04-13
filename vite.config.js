@@ -5,5 +5,13 @@ export default defineConfig({
     build: {
         target: "es2022",
         sourcemap: false,
+        chunkSizeWarningLimit: 1400,
+        rollupOptions: {
+            output: {
+                manualChunks: {
+                    matrix: ["matrix-js-sdk"],
+                },
+            },
+        },
     },
 });

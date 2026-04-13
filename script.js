@@ -46,6 +46,7 @@ const state = {
     activeRoomContextId: null,
     messageSearchResults: [],
     currentPublicRooms: [],
+    modalCloseTimer: null,
     replyToEventId: null,
     editEventId: null,
     typingTimeout: null,
@@ -243,6 +244,8 @@ function bindStaticEvents() {
     refs.messageContainer.addEventListener("click", handleMessageAreaClick);
     refs.messageContainer.addEventListener("contextmenu", handleMessageAreaContext);
 
+    refs.emptyState.addEventListener("click", handleEmptyStateActions);
+
     refs.chatPinnedSection.addEventListener("click", handleRoomListClick);
     refs.chatDmSection.addEventListener("click", handleRoomListClick);
     refs.chatRoomsSection.addEventListener("click", handleRoomListClick);
@@ -290,6 +293,8 @@ function updateAuthMode(mode) {
 function showAuth() {
     refs.authScreen.classList.remove("hidden");
     refs.appShell.classList.add("hidden");
+    refs.body.classList.remove("modal-open");
+    setSyncVisualState("");
 }
 
 function showApp() {
@@ -297,10 +302,169 @@ function showApp() {
     refs.appShell.classList.remove("hidden");
 }
 
+function setSyncVisualState(mode = "") {
+    refs.body.classList.toggle("is-syncing", mode === "syncing");
+    refs.body.classList.toggle("is-reconnecting", mode === "reconnecting");
+}
+
+function handleEmptyStateActions(event) {
+    const action = event.target.closest("[data-empty-action]")?.dataset.emptyAction;
+    if (!action) return;
+
+    if (action === "switch-publics") {
+        switchTab("publics");
+        refs.publicSearchInput.focus();
+        return;
+    }
+
+    if (action === "new-private") {
+        openCreateRoomModal("private");
+    }
+}
+
+function buildRoomSkeletonItems(count = 4) {
+    return Array.from({ length: count }, (_, index) => `
+        <div class="room-item skeleton-room-item${index === 0 ? " skeleton-room-item-accent" : ""}">
+            <div class="room-avatar skeleton-avatar-shell"><span class="skeleton-avatar-core"></span></div>
+            <div class="room-main">
+                <div class="room-top">
+                    <span class="skeleton-line w-52"></span>
+                    <span class="skeleton-line w-18"></span>
+                </div>
+                <div class="room-preview"><span class="skeleton-line w-82"></span></div>
+                <div class="room-meta-row">
+                    <span class="skeleton-pill"></span>
+                    <span class="skeleton-pill short"></span>
+                </div>
+            </div>
+        </div>
+    `).join("");
+}
+
+function renderRoomSkeletonSection(node, title, count = 4) {
+    node.innerHTML = `
+        <div class="section-title">${escapeHtml(title)}</div>
+        ${buildRoomSkeletonItems(count)}
+    `;
+}
+
+function renderRoomsSkeleton() {
+    renderRoomSkeletonSection(refs.chatPinnedSection, "Загрузка", 3);
+    renderRoomSkeletonSection(refs.chatDmSection, "DM", 3);
+    renderRoomSkeletonSection(refs.chatRoomsSection, "Комнаты", 5);
+    renderRoomSkeletonSection(refs.privateRoomsSection, "Приватные", 4);
+    refs.joinedPublicSection.innerHTML = "";
+    refs.publicDirectorySection.innerHTML = `
+        <div class="section-title">Директория homeserver</div>
+        ${buildRoomSkeletonItems(4)}
+    `;
+    refs.chatEmptyState.classList.add("hidden");
+    refs.privateEmptyState.classList.add("hidden");
+    refs.publicEmptyState.classList.add("hidden");
+}
+
+function buildMessageSkeletons(count = 7) {
+    return Array.from({ length: count }, (_, index) => {
+        const mine = index % 3 === 2;
+        return `
+            <div class="msg-row skeleton-message-row${mine ? " mine" : ""}">
+                ${mine ? "" : '<div class="member-avatar skeleton-avatar-shell"><span class="skeleton-avatar-core small"></span></div>'}
+                <div class="msg-bubble skeleton-bubble${mine ? " mine" : ""}">
+                    <span class="skeleton-line ${mine ? "w-44" : "w-52"}"></span>
+                    <span class="skeleton-line w-78"></span>
+                    <span class="skeleton-line ${mine ? "w-30" : "w-24"}"></span>
+                </div>
+            </div>
+        `;
+    }).join("");
+}
+
+function renderChatSkeleton() {
+    refs.emptyState.classList.add("hidden");
+    refs.chatView.classList.remove("hidden");
+    refs.chatHeaderAvatar.innerHTML = '<span class="skeleton-avatar-core"></span>';
+    refs.chatHeaderTitle.innerHTML = '<span class="skeleton-line w-42"></span>';
+    refs.chatHeaderStatus.innerHTML = '<span class="skeleton-line w-24"></span>';
+    refs.chatHeaderEncrypted.classList.add("hidden");
+    refs.messageContainer.innerHTML = buildMessageSkeletons();
+    refs.roomSearchPanel.classList.add("hidden");
+    refs.messageSearchResults.classList.add("hidden");
+    refs.messageSearchResults.innerHTML = "";
+    refs.composerContext.classList.add("hidden");
+    refs.typingBar.classList.add("hidden");
+    refs.chatInput.placeholder = "Подключаем таймлайн…";
+    refs.sendBtn.disabled = true;
+    refs.attachBtn.disabled = true;
+}
+
+function clearComposerLoadingState() {
+    refs.chatInput.placeholder = "Сообщение";
+    refs.sendBtn.disabled = false;
+    refs.attachBtn.disabled = false;
+}
+
+function buildProfileSkeletonHtml() {
+    return `
+        <div class="modal-hero modal-hero-profile skeleton-hero">
+            <div class="modal-hero-avatar skeleton-avatar-shell"><span class="skeleton-avatar-core"></span></div>
+            <div class="modal-hero-copy">
+                <div class="skeleton-line w-16"></div>
+                <div class="skeleton-line w-48 tall"></div>
+                <div class="skeleton-line w-60"></div>
+                <div class="hero-badge-row">
+                    <span class="skeleton-pill"></span>
+                    <span class="skeleton-pill short"></span>
+                </div>
+            </div>
+        </div>
+        <div class="detail-grid detail-grid-quad">
+            <div class="detail-card"><span class="skeleton-line w-30"></span><span class="skeleton-line w-74"></span></div>
+            <div class="detail-card"><span class="skeleton-line w-28"></span><span class="skeleton-line w-68"></span></div>
+            <div class="detail-card"><span class="skeleton-line w-26"></span><span class="skeleton-line w-34"></span></div>
+            <div class="detail-card"><span class="skeleton-line w-24"></span><span class="skeleton-line w-44"></span></div>
+        </div>
+    `;
+}
+
+function buildRoomInfoSkeletonHtml() {
+    return `
+        <div class="modal-hero modal-hero-room skeleton-hero">
+            <div class="modal-hero-avatar skeleton-avatar-shell"><span class="skeleton-avatar-core"></span></div>
+            <div class="modal-hero-copy">
+                <div class="skeleton-line w-18"></div>
+                <div class="skeleton-line w-54 tall"></div>
+                <div class="skeleton-line w-62"></div>
+                <div class="hero-badge-row">
+                    <span class="skeleton-pill"></span>
+                    <span class="skeleton-pill short"></span>
+                    <span class="skeleton-pill short"></span>
+                </div>
+            </div>
+        </div>
+        <div class="detail-grid detail-grid-quad">
+            <div class="detail-card"><span class="skeleton-line w-26"></span><span class="skeleton-line w-60"></span></div>
+            <div class="detail-card"><span class="skeleton-line w-24"></span><span class="skeleton-line w-48"></span></div>
+            <div class="detail-card"><span class="skeleton-line w-22"></span><span class="skeleton-line w-30"></span></div>
+            <div class="detail-card"><span class="skeleton-line w-22"></span><span class="skeleton-line w-28"></span></div>
+        </div>
+        <div class="room-info-card feature-card"><span class="skeleton-line w-18"></span><span class="skeleton-line w-92"></span><span class="skeleton-line w-72"></span></div>
+    `;
+}
+
+function updateModalContent(title, subtitle = "", html = "") {
+    refs.modalTitle.textContent = title;
+    refs.modalSubtitle.textContent = subtitle;
+    refs.modalSubtitle.classList.toggle("hidden", !subtitle);
+    refs.modalBody.innerHTML = html;
+    refs.modalBody.scrollTop = 0;
+}
+
 async function handleAuthSubmit(event) {
     event.preventDefault();
     refs.authError.classList.add("hidden");
     refs.authSubmit.disabled = true;
+    refs.authSubmit.dataset.loading = "true";
+    refs.authSubmit.textContent = state.authMode === "register" ? "Создаю аккаунт…" : "Вхожу…";
 
     const baseUrl = normalizeHomeserver(refs.authHomeserver.value.trim());
     const usernameRaw = refs.authUsername.value.trim();
@@ -360,6 +524,8 @@ async function handleAuthSubmit(event) {
         refs.authError.classList.remove("hidden");
     } finally {
         refs.authSubmit.disabled = false;
+        refs.authSubmit.dataset.loading = "false";
+        refs.authSubmit.textContent = state.authMode === "register" ? "Создать аккаунт" : "Войти";
     }
 }
 
@@ -412,8 +578,9 @@ async function startSession(session, options = {}) {
 
     showApp();
     renderSettings();
-    renderRooms();
-    renderChat();
+    setSyncVisualState("syncing");
+    renderRoomsSkeleton();
+    renderChatSkeleton();
 
     client.startClient({
         initialSyncLimit: 40,
@@ -500,7 +667,9 @@ function handleSyncState(syncState, previousState, data) {
     state.syncState = syncState;
 
     if (["PREPARED", "SYNCING", "CATCHUP"].includes(syncState)) {
+        setSyncVisualState("");
         clearStatus();
+        clearComposerLoadingState();
         renderRooms();
         if (!state.activeRoomId) autoOpenPreferredRoom();
         renderChat();
@@ -509,17 +678,22 @@ function handleSyncState(syncState, previousState, data) {
     }
 
     if (syncState === "RECONNECTING") {
+        setSyncVisualState("reconnecting");
         showStatus("Потеряно соединение. Пытаюсь переподключиться…", "error", true);
         return;
     }
 
     if (syncState === "ERROR") {
+        setSyncVisualState("");
+        clearComposerLoadingState();
         const message = data?.error ? parseError(data.error) : "Ошибка синхронизации.";
         showStatus(message, "error", true);
         return;
     }
 
     if (syncState === "STOPPED") {
+        setSyncVisualState("");
+        clearComposerLoadingState();
         showStatus("Синхронизация остановлена.", "error", true);
     }
 }
@@ -757,6 +931,7 @@ function openRoom(roomId) {
 
 function renderChat() {
     const room = getActiveRoom();
+    clearComposerLoadingState();
     refs.composerContext.classList.toggle("hidden", !state.replyToEventId && !state.editEventId);
     refs.composerContext.innerHTML = buildComposerContextHtml(room);
 
@@ -1070,6 +1245,11 @@ async function uploadAndSendFile(file) {
 async function loadPublicRooms(query = "") {
     if (!state.client) return;
     try {
+        refs.publicDirectorySection.innerHTML = `
+            <div class="section-title">Директория homeserver</div>
+            ${buildRoomSkeletonItems(4)}
+        `;
+        refs.publicEmptyState.classList.add("hidden");
         showStatus("Загружаю публичные комнаты…", "info", true);
         const response = await state.client.publicRooms({
             limit: 30,
@@ -1320,15 +1500,25 @@ async function buildAvatarMarkup(label, mxcUrl = "", className = "modal-hero-ava
 }
 
 function openModal(title, subtitle = "", html = "") {
-    refs.modalTitle.textContent = title;
-    refs.modalSubtitle.textContent = subtitle;
-    refs.modalBody.innerHTML = html;
-    refs.modalOverlay.classList.add("active");
+    clearTimeout(state.modalCloseTimer);
+    updateModalContent(title, subtitle, html);
+    refs.body.classList.add("modal-open");
+    refs.modalOverlay.classList.remove("closing");
+    requestAnimationFrame(() => {
+        refs.modalOverlay.classList.add("active");
+    });
 }
 
 function closeModal() {
+    clearTimeout(state.modalCloseTimer);
+    refs.body.classList.remove("modal-open");
     refs.modalOverlay.classList.remove("active");
-    refs.modalBody.innerHTML = "";
+    refs.modalOverlay.classList.add("closing");
+    state.modalCloseTimer = setTimeout(() => {
+        refs.modalOverlay.classList.remove("closing");
+        refs.modalBody.innerHTML = "";
+        refs.modalSubtitle.classList.remove("hidden");
+    }, 220);
 }
 
 function openCreateRoomModal(kind) {
@@ -1517,6 +1707,8 @@ async function openRoomInfo(roomId) {
     const room = roomId ? state.client?.getRoom(roomId) : null;
     if (!room) return;
 
+    openModal(getRoomName(room), "Загружаю room info…", buildRoomInfoSkeletonHtml());
+
     const topic = getRoomTopic(room) || "Без topic";
     const avatarHtml = await buildAvatarMarkup(getRoomName(room), getRoomAvatarMxc(room), "modal-hero-avatar room-avatar-xl");
     const memberRows = (room.getJoinedMembers?.() || [])
@@ -1532,7 +1724,7 @@ async function openRoomInfo(roomId) {
         `)
         .join("");
 
-    openModal(
+    updateModalContent(
         getRoomName(room),
         room.roomId,
         `
@@ -1606,6 +1798,8 @@ async function openRoomInfo(roomId) {
 async function openUserProfile(userId) {
     if (!userId || !state.client) return;
 
+    openModal("Профиль", "Загружаю информацию о пользователе…", buildProfileSkeletonHtml());
+
     (async () => {
         try {
             const profile = await state.client.getProfileInfo(userId).catch(() => ({}));
@@ -1617,7 +1811,7 @@ async function openUserProfile(userId) {
             );
             const blocked = (state.ui.blockedUsers || []).includes(userId);
 
-            openModal(
+            updateModalContent(
                 profile.displayname || userId,
                 userId,
                 `
@@ -2228,6 +2422,8 @@ function parseError(error) {
 
 function showStatus(text, mode = "info", sticky = false) {
     refs.statusBanner.textContent = text;
+    refs.statusBanner.dataset.mode = mode;
+    refs.statusBanner.classList.toggle("is-sticky", sticky);
     refs.statusBanner.classList.remove("hidden");
     refs.statusBanner.style.background = mode === "error" ? "rgba(58, 18, 18, 0.98)" : "var(--bg-elevated)";
     refs.statusBanner.style.borderColor = mode === "error" ? "rgba(255, 125, 119, 0.35)" : "var(--border)";
@@ -2239,6 +2435,7 @@ function showStatus(text, mode = "info", sticky = false) {
 function clearStatus() {
     clearTimeout(showStatus.timer);
     refs.statusBanner.classList.add("hidden");
+    refs.statusBanner.classList.remove("is-sticky");
 }
 
 function loadJson(key, fallback) {

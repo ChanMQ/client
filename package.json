@@ -10,7 +10,8 @@
     "deploy": "wrangler deploy"
   },
   "dependencies": {
-    "matrix-js-sdk": "^41.3.0"
+    "matrix-js-sdk": "^41.3.0",
+    "@matrix-org/matrix-sdk-crypto-wasm": "^18.0.0"
   },
   "devDependencies": {
     "vite": "^7.3.2",
