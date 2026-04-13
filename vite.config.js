@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 
 export default defineConfig({
+    appType: "spa",
     base: "/",
     build: {
         target: "es2022",

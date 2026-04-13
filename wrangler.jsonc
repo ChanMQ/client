@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "client",
+  "name": "e2e-mom",
   "compatibility_date": "2026-04-13",
   "assets": {
     "directory": "./dist",
