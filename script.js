@@ -2,7 +2,7 @@ import * as sdk from "matrix-js-sdk";
 import { initAsync as initCryptoWasm } from "@matrix-org/matrix-sdk-crypto-wasm";
 import { decodeRecoveryKey } from "matrix-js-sdk/lib/crypto-api";
 
-const APP_NAME = "Ficus Matrix App";
+const APP_NAME = "Ficus Matrix";
 const STORAGE_KEYS = {
     session: "ficus_matrix_app_session_v3",
     settings: "ficus_matrix_app_settings_v3",
@@ -10,155 +10,57 @@ const STORAGE_KEYS = {
 };
 const SESSION_SECRET_STORAGE_KEY = "ficus_matrix_app_secret_storage_key";
 
-const DEFAULT_SETTINGS = {
-    enableCrypto: true,
-    sendReadReceipts: true,
-    sendTyping: true,
-    compactMode: false,
-};
-
-const DEFAULT_UI = {
-    pinnedRooms: [],
-    mutedRooms: [],
-    blockedUsers: [],
-    activeTab: "chats",
-    lastRoomId: null,
-};
+const DEFAULT_SETTINGS = { enableCrypto: true };
+const DEFAULT_UI = { pinnedRooms: [], blockedUsers: [], activeTab: "chats", lastRoomId: null };
 
 const state = {
-    client: null,
-    session: null,
-    settings: loadJson(STORAGE_KEYS.settings, DEFAULT_SETTINGS),
-    ui: loadJson(STORAGE_KEYS.ui, DEFAULT_UI),
-    authMode: "login",
-    syncState: "STOPPED",
-    cryptoReady: false,
-    cryptoStatus: {
-        enabled: false,
-        secretStorageReady: false,
-        keyBackupReady: false,
-        keyBackupVersion: null,
-        keyBackupTrusted: false,
-        lastError: "",
-    },
-    activeRoomId: null,
-    activeMessageEvent: null,
-    activeRoomContextId: null,
-    messageSearchResults: [],
-    currentPublicRooms: [],
-    modalCloseTimer: null,
-    replyToEventId: null,
-    editEventId: null,
-    typingTimeout: null,
-    secretStorageKey: loadSecretStorageKey(),
-    mediaCache: new Map(),
+    client: null, session: null, settings: loadJson(STORAGE_KEYS.settings, DEFAULT_SETTINGS),
+    ui: loadJson(STORAGE_KEYS.ui, DEFAULT_UI), authMode: "login", syncState: "STOPPED", cryptoReady: false,
+    cryptoStatus: { enabled: false, lastError: "" }, activeRoomId: null, activeMessageEvent: null,
+    activeRoomContextId: null, currentPublicRooms: [], modalCloseTimer: null, replyToEventId: null, editEventId: null,
+    secretStorageKey: loadSecretStorageKey(), mediaCache: new Map(),
 };
 
 const refs = {
-    body: document.body,
-    statusBanner: document.getElementById("statusBanner"),
-
-    authScreen: document.getElementById("authScreen"),
-    authForm: document.getElementById("authForm"),
-    authTabs: Array.from(document.querySelectorAll(".auth-tab")),
-    authHomeserver: document.getElementById("authHomeserver"),
-    authUsername: document.getElementById("authUsername"),
-    authPassword: document.getElementById("authPassword"),
-    authDisplayName: document.getElementById("authDisplayName"),
-    authDisplayNameField: document.getElementById("authDisplayNameField"),
-    authEnableCrypto: document.getElementById("authEnableCrypto"),
-    authError: document.getElementById("authError"),
-    authSubmit: document.getElementById("authSubmit"),
-
-    appShell: document.getElementById("appShell"),
-    navItems: Array.from(document.querySelectorAll(".nav-item")),
-    tabs: {
-        chats: document.getElementById("tab-chats"),
-        publics: document.getElementById("tab-publics"),
-        privates: document.getElementById("tab-privates"),
-        settings: document.getElementById("tab-settings"),
+    body: document.body, statusBanner: document.getElementById("statusBanner"),
+    authScreen: document.getElementById("authScreen"), authForm: document.getElementById("authForm"),
+    authTabs: Array.from(document.querySelectorAll(".auth-tab")), authHomeserver: document.getElementById("authHomeserver"),
+    authUsername: document.getElementById("authUsername"), authPassword: document.getElementById("authPassword"),
+    authDisplayName: document.getElementById("authDisplayName"), authDisplayNameField: document.getElementById("authDisplayNameField"),
+    authEnableCrypto: document.getElementById("authEnableCrypto"), authError: document.getElementById("authError"),
+    authSubmit: document.getElementById("authSubmit"), appShell: document.getElementById("appShell"),
+    navItems: Array.from(document.querySelectorAll(".nav-item")), tabs: {
+        chats: document.getElementById("tab-chats"), publics: document.getElementById("tab-publics"),
+        privates: document.getElementById("tab-privates"), settings: document.getElementById("tab-settings"),
     },
-
-    roomSearchInput: document.getElementById("roomSearchInput"),
-    composeMenuBtn: document.getElementById("composeMenuBtn"),
-    publicSearchInput: document.getElementById("publicSearchInput"),
-    publicSearchBtn: document.getElementById("publicSearchBtn"),
-
-    chatPinnedSection: document.getElementById("chatPinnedSection"),
-    chatDmSection: document.getElementById("chatDmSection"),
-    chatRoomsSection: document.getElementById("chatRoomsSection"),
-    chatEmptyState: document.getElementById("chatEmptyState"),
-    joinedPublicSection: document.getElementById("joinedPublicSection"),
-    publicDirectorySection: document.getElementById("publicDirectorySection"),
-    publicEmptyState: document.getElementById("publicEmptyState"),
-    privateRoomsSection: document.getElementById("privateRoomsSection"),
-    privateEmptyState: document.getElementById("privateEmptyState"),
-
-    settingsProfileCard: document.getElementById("settingsProfileCard"),
-    cryptoStatusValue: document.getElementById("cryptoStatusValue"),
-    backupStatusValue: document.getElementById("backupStatusValue"),
-    homeserverInfoValue: document.getElementById("homeserverInfoValue"),
-    mxidInfoValue: document.getElementById("mxidInfoValue"),
-    deviceInfoValue: document.getElementById("deviceInfoValue"),
-    editProfileBtn: document.getElementById("editProfileBtn"),
-    openOwnProfileBtn: document.getElementById("openOwnProfileBtn"),
-    restoreKeysBtn: document.getElementById("restoreKeysBtn"),
-    checkBackupBtn: document.getElementById("checkBackupBtn"),
-    logoutBtn: document.getElementById("logoutBtn"),
-    settingReadReceipts: document.getElementById("settingReadReceipts"),
-    settingTyping: document.getElementById("settingTyping"),
-    settingCompactMode: document.getElementById("settingCompactMode"),
-
-    emptyState: document.getElementById("emptyState"),
-    chatView: document.getElementById("chatView"),
-    chatHeaderInfo: document.getElementById("chatHeaderInfo"),
-    chatHeaderAvatar: document.getElementById("chatHeaderAvatar"),
-    chatHeaderTitle: document.getElementById("chatHeaderTitle"),
-    chatHeaderStatus: document.getElementById("chatHeaderStatus"),
-    chatHeaderEncrypted: document.getElementById("chatHeaderEncrypted"),
-    backBtn: document.getElementById("backBtn"),
-    toggleRoomSearchBtn: document.getElementById("toggleRoomSearchBtn"),
-    openRoomInfoBtn: document.getElementById("openRoomInfoBtn"),
-    roomSearchPanel: document.getElementById("roomSearchPanel"),
-    messageSearchInput: document.getElementById("messageSearchInput"),
-    messageSearchBtn: document.getElementById("messageSearchBtn"),
-    messageSearchResults: document.getElementById("messageSearchResults"),
-    composerContext: document.getElementById("composerContext"),
-    messageContainer: document.getElementById("messageContainer"),
-    typingBar: document.getElementById("typingBar"),
-    attachBtn: document.getElementById("attachBtn"),
-    attachmentInput: document.getElementById("attachmentInput"),
-    chatInput: document.getElementById("chatInput"),
-    sendBtn: document.getElementById("sendBtn"),
-
-    globalOverlay: document.getElementById("globalOverlay"),
-    composeMenu: document.getElementById("composeMenu"),
-    roomMenu: document.getElementById("roomMenu"),
-    messageMenu: document.getElementById("messageMenu"),
-    retryMessageMenuItem: document.getElementById("retryMessageMenuItem"),
-
-    modalOverlay: document.getElementById("modalOverlay"),
-    modalCard: document.getElementById("modalCard"),
-    modalTitle: document.getElementById("modalTitle"),
-    modalSubtitle: document.getElementById("modalSubtitle"),
-    modalBody: document.getElementById("modalBody"),
-    closeModalBtn: document.getElementById("closeModalBtn"),
+    roomSearchInput: document.getElementById("roomSearchInput"), composeMenuBtn: document.getElementById("composeMenuBtn"),
+    publicSearchInput: document.getElementById("publicSearchInput"), publicSearchBtn: document.getElementById("publicSearchBtn"),
+    chatPinnedSection: document.getElementById("chatPinnedSection"), chatDmSection: document.getElementById("chatDmSection"),
+    chatRoomsSection: document.getElementById("chatRoomsSection"), chatEmptyState: document.getElementById("chatEmptyState"),
+    joinedPublicSection: document.getElementById("joinedPublicSection"), publicDirectorySection: document.getElementById("publicDirectorySection"),
+    publicEmptyState: document.getElementById("publicEmptyState"), privateRoomsSection: document.getElementById("privateRoomsSection"),
+    privateEmptyState: document.getElementById("privateEmptyState"), settingsProfileCard: document.getElementById("settingsProfileCard"),
+    cryptoStatusValue: document.getElementById("cryptoStatusValue"), backupStatusValue: document.getElementById("backupStatusValue"),
+    mxidInfoValue: document.getElementById("mxidInfoValue"), restoreKeysBtn: document.getElementById("restoreKeysBtn"),
+    logoutBtn: document.getElementById("logoutBtn"), emptyState: document.getElementById("emptyState"),
+    chatView: document.getElementById("chatView"), chatHeaderInfo: document.getElementById("chatHeaderInfo"),
+    chatHeaderAvatar: document.getElementById("chatHeaderAvatar"), chatHeaderTitle: document.getElementById("chatHeaderTitle"),
+    chatHeaderStatus: document.getElementById("chatHeaderStatus"), chatHeaderEncrypted: document.getElementById("chatHeaderEncrypted"),
+    backBtn: document.getElementById("backBtn"), openRoomInfoBtn: document.getElementById("openRoomInfoBtn"),
+    composerContext: document.getElementById("composerContext"), messageContainer: document.getElementById("messageContainer"),
+    attachBtn: document.getElementById("attachBtn"), attachmentInput: document.getElementById("attachmentInput"),
+    chatInput: document.getElementById("chatInput"), sendBtn: document.getElementById("sendBtn"),
+    globalOverlay: document.getElementById("globalOverlay"), composeMenu: document.getElementById("composeMenu"),
+    roomMenu: document.getElementById("roomMenu"), messageMenu: document.getElementById("messageMenu"),
+    modalOverlay: document.getElementById("modalOverlay"), modalCard: document.getElementById("modalCard"),
+    modalTitle: document.getElementById("modalTitle"), modalSubtitle: document.getElementById("modalSubtitle"),
+    modalBody: document.getElementById("modalBody"), closeModalBtn: document.getElementById("closeModalBtn"),
 };
-
-const CLIENT_EVENT_SYNC = sdk.ClientEvent?.Sync ?? "sync";
-const CLIENT_EVENT_EVENT = sdk.ClientEvent?.Event ?? "event";
-const CLIENT_EVENT_ROOM = sdk.ClientEvent?.Room ?? "Room";
-const CLIENT_EVENT_ACCOUNT_DATA = sdk.ClientEvent?.AccountData ?? "accountData";
-const ROOM_EVENT_TIMELINE = sdk.RoomEvent?.Timeline ?? "Room.timeline";
-const ROOM_EVENT_RECEIPT = sdk.RoomEvent?.Receipt ?? "Room.receipt";
-const ROOM_MEMBER_EVENT_TYPING = sdk.RoomMemberEvent?.Typing ?? "RoomMember.typing";
 
 init();
 
 async function init() {
     bindStaticEvents();
-    applyLocalSettings();
-    syncSettingsUI();
     updateAuthMode(state.authMode);
     switchTab(state.ui.activeTab || "chats");
 
@@ -169,424 +71,106 @@ async function init() {
             await startSession(session, { restoring: true });
             return;
         } catch (error) {
-            console.error(error);
             clearSession();
-            showStatus(`Сохранённая сессия не восстановилась: ${parseError(error)}`, "error");
+            showStatus(`Сессия устарела: ${parseError(error)}`, "error");
         }
     }
-
     showAuth();
 }
 
 function bindStaticEvents() {
-    refs.authTabs.forEach((button) => {
-        button.addEventListener("click", () => updateAuthMode(button.dataset.authMode || "login"));
-    });
-
+    refs.authTabs.forEach(btn => btn.addEventListener("click", () => updateAuthMode(btn.dataset.authMode)));
     refs.authForm.addEventListener("submit", handleAuthSubmit);
-
-    refs.navItems.forEach((item) => {
-        item.addEventListener("click", () => switchTab(item.dataset.tab || "chats"));
-    });
-
+    refs.navItems.forEach(item => item.addEventListener("click", () => switchTab(item.dataset.tab)));
     refs.roomSearchInput.addEventListener("input", renderRooms);
     refs.publicSearchBtn.addEventListener("click", () => loadPublicRooms(refs.publicSearchInput.value.trim()));
-    refs.publicSearchInput.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") {
-            event.preventDefault();
-            loadPublicRooms(refs.publicSearchInput.value.trim());
-        }
-    });
-
-    refs.composeMenuBtn.addEventListener("click", (event) => {
-        event.stopPropagation();
-        openMenu(refs.composeMenu, event.currentTarget.getBoundingClientRect());
-    });
-
+    refs.composeMenuBtn.addEventListener("click", e => { e.stopPropagation(); openMenu(refs.composeMenu, e.currentTarget.getBoundingClientRect()); });
     refs.globalOverlay.addEventListener("click", closeMenus);
     refs.closeModalBtn.addEventListener("click", closeModal);
-    refs.modalOverlay.addEventListener("click", (event) => {
-        if (event.target === refs.modalOverlay) closeModal();
-    });
-
+    refs.modalOverlay.addEventListener("click", e => { if (e.target === refs.modalOverlay) closeModal(); });
     refs.composeMenu.addEventListener("click", handleComposeMenu);
     refs.roomMenu.addEventListener("click", handleRoomMenu);
     refs.messageMenu.addEventListener("click", handleMessageMenu);
-
-    refs.backBtn.addEventListener("click", () => {
-        refs.body.classList.remove("mobile-chat-active");
-    });
-
-    refs.toggleRoomSearchBtn.addEventListener("click", () => {
-        refs.roomSearchPanel.classList.toggle("hidden");
-        if (!refs.roomSearchPanel.classList.contains("hidden")) refs.messageSearchInput.focus();
-    });
-
+    refs.backBtn.addEventListener("click", () => refs.body.classList.remove("mobile-chat-active"));
     refs.openRoomInfoBtn.addEventListener("click", () => openRoomInfo(state.activeRoomId));
     refs.chatHeaderInfo.addEventListener("click", () => openRoomInfo(state.activeRoomId));
-
-    refs.messageSearchBtn.addEventListener("click", runMessageSearch);
-    refs.messageSearchInput.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") {
-            event.preventDefault();
-            runMessageSearch();
-        }
-    });
-
     refs.sendBtn.addEventListener("click", sendCurrentMessage);
     refs.attachBtn.addEventListener("click", () => refs.attachmentInput.click());
     refs.attachmentInput.addEventListener("change", handleAttachmentSelection);
-
-    refs.chatInput.addEventListener("keydown", handleComposerKeydown);
-    refs.chatInput.addEventListener("input", handleComposerInput);
-
+    refs.chatInput.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendCurrentMessage(); } });
+    refs.chatInput.addEventListener("input", e => { e.currentTarget.style.height = "auto"; e.currentTarget.style.height = `${Math.min(e.currentTarget.scrollHeight, 140)}px`; });
     refs.messageContainer.addEventListener("scroll", handleTimelineScroll);
-    refs.messageContainer.addEventListener("click", handleMessageAreaClick);
     refs.messageContainer.addEventListener("contextmenu", handleMessageAreaContext);
-
-    refs.emptyState.addEventListener("click", handleEmptyStateActions);
-
-    refs.chatPinnedSection.addEventListener("click", handleRoomListClick);
-    refs.chatDmSection.addEventListener("click", handleRoomListClick);
-    refs.chatRoomsSection.addEventListener("click", handleRoomListClick);
-    refs.privateRoomsSection.addEventListener("click", handleRoomListClick);
-    refs.joinedPublicSection.addEventListener("click", handleRoomListClick);
+    [refs.chatPinnedSection, refs.chatDmSection, refs.chatRoomsSection, refs.privateRoomsSection, refs.joinedPublicSection].forEach(c => {
+        c.addEventListener("click", handleRoomListClick);
+        c.addEventListener("contextmenu", handleRoomContextMenu);
+    });
     refs.publicDirectorySection.addEventListener("click", handlePublicListClick);
-
-    [refs.chatPinnedSection, refs.chatDmSection, refs.chatRoomsSection, refs.privateRoomsSection, refs.joinedPublicSection].forEach((container) => {
-        container.addEventListener("contextmenu", handleRoomContextMenu);
-    });
-
-    refs.editProfileBtn.addEventListener("click", openEditProfileModal);
-    refs.openOwnProfileBtn.addEventListener("click", () => openUserProfile(state.session?.userId));
     refs.restoreKeysBtn.addEventListener("click", openRestoreKeysModal);
-    refs.checkBackupBtn.addEventListener("click", recheckCryptoAndBackup);
     refs.logoutBtn.addEventListener("click", logout);
-
-    refs.settingReadReceipts.addEventListener("change", () => {
-        setSettings({ sendReadReceipts: refs.settingReadReceipts.checked });
-    });
-    refs.settingTyping.addEventListener("change", () => {
-        setSettings({ sendTyping: refs.settingTyping.checked });
-    });
-    refs.settingCompactMode.addEventListener("change", () => {
-        setSettings({ compactMode: refs.settingCompactMode.checked });
-    });
-
     refs.modalBody.addEventListener("click", handleModalActions);
-    refs.modalBody.addEventListener("change", handleModalChanges);
     refs.modalBody.addEventListener("submit", handleModalSubmit);
-
-    window.addEventListener("online", () => showStatus("Сеть восстановлена."));
-    window.addEventListener("offline", () => showStatus("Нет сети. Клиент останется в offline/reconnecting режиме.", "error", true));
 }
 
 function updateAuthMode(mode) {
     state.authMode = mode;
-    refs.authTabs.forEach((button) => button.classList.toggle("active", button.dataset.authMode === mode));
+    refs.authTabs.forEach(b => b.classList.toggle("active", b.dataset.authMode === mode));
     refs.authDisplayNameField.classList.toggle("hidden", mode !== "register");
     refs.authSubmit.textContent = mode === "register" ? "Создать аккаунт" : "Войти";
     refs.authPassword.autocomplete = mode === "register" ? "new-password" : "current-password";
-    refs.authError.classList.add("hidden");
 }
 
-function showAuth() {
-    refs.authScreen.classList.remove("hidden");
-    refs.appShell.classList.add("hidden");
-    refs.body.classList.remove("modal-open");
-    setSyncVisualState("");
-}
-
-function showApp() {
-    refs.authScreen.classList.add("hidden");
-    refs.appShell.classList.remove("hidden");
-}
-
-function setSyncVisualState(mode = "") {
-    refs.body.classList.toggle("is-syncing", mode === "syncing");
-    refs.body.classList.toggle("is-reconnecting", mode === "reconnecting");
-}
-
-function handleEmptyStateActions(event) {
-    const action = event.target.closest("[data-empty-action]")?.dataset.emptyAction;
-    if (!action) return;
-
-    if (action === "switch-publics") {
-        switchTab("publics");
-        refs.publicSearchInput.focus();
-        return;
-    }
-
-    if (action === "new-private") {
-        openCreateRoomModal("private");
-    }
-}
-
-function buildRoomSkeletonItems(count = 4) {
-    return Array.from({ length: count }, (_, index) => `
-        <div class="room-item skeleton-room-item${index === 0 ? " skeleton-room-item-accent" : ""}">
-            <div class="room-avatar skeleton-avatar-shell"><span class="skeleton-avatar-core"></span></div>
-            <div class="room-main">
-                <div class="room-top">
-                    <span class="skeleton-line w-52"></span>
-                    <span class="skeleton-line w-18"></span>
-                </div>
-                <div class="room-preview"><span class="skeleton-line w-82"></span></div>
-                <div class="room-meta-row">
-                    <span class="skeleton-pill"></span>
-                    <span class="skeleton-pill short"></span>
-                </div>
-            </div>
-        </div>
-    `).join("");
-}
-
-function renderRoomSkeletonSection(node, title, count = 4) {
-    node.innerHTML = `
-        <div class="section-title">${escapeHtml(title)}</div>
-        ${buildRoomSkeletonItems(count)}
-    `;
-}
-
-function renderRoomsSkeleton() {
-    renderRoomSkeletonSection(refs.chatPinnedSection, "Загрузка", 3);
-    renderRoomSkeletonSection(refs.chatDmSection, "DM", 3);
-    renderRoomSkeletonSection(refs.chatRoomsSection, "Комнаты", 5);
-    renderRoomSkeletonSection(refs.privateRoomsSection, "Приватные", 4);
-    refs.joinedPublicSection.innerHTML = "";
-    refs.publicDirectorySection.innerHTML = `
-        <div class="section-title">Директория homeserver</div>
-        ${buildRoomSkeletonItems(4)}
-    `;
-    refs.chatEmptyState.classList.add("hidden");
-    refs.privateEmptyState.classList.add("hidden");
-    refs.publicEmptyState.classList.add("hidden");
-}
-
-function buildMessageSkeletons(count = 7) {
-    return Array.from({ length: count }, (_, index) => {
-        const mine = index % 3 === 2;
-        return `
-            <div class="msg-row skeleton-message-row${mine ? " mine" : ""}">
-                ${mine ? "" : '<div class="member-avatar skeleton-avatar-shell"><span class="skeleton-avatar-core small"></span></div>'}
-                <div class="msg-bubble skeleton-bubble${mine ? " mine" : ""}">
-                    <span class="skeleton-line ${mine ? "w-44" : "w-52"}"></span>
-                    <span class="skeleton-line w-78"></span>
-                    <span class="skeleton-line ${mine ? "w-30" : "w-24"}"></span>
-                </div>
-            </div>
-        `;
-    }).join("");
-}
-
-function renderChatSkeleton() {
-    refs.emptyState.classList.add("hidden");
-    refs.chatView.classList.remove("hidden");
-    refs.chatHeaderAvatar.innerHTML = '<span class="skeleton-avatar-core"></span>';
-    refs.chatHeaderTitle.innerHTML = '<span class="skeleton-line w-42"></span>';
-    refs.chatHeaderStatus.innerHTML = '<span class="skeleton-line w-24"></span>';
-    refs.chatHeaderEncrypted.classList.add("hidden");
-    refs.messageContainer.innerHTML = buildMessageSkeletons();
-    refs.roomSearchPanel.classList.add("hidden");
-    refs.messageSearchResults.classList.add("hidden");
-    refs.messageSearchResults.innerHTML = "";
-    refs.composerContext.classList.add("hidden");
-    refs.typingBar.classList.add("hidden");
-    refs.chatInput.placeholder = "Подключаем таймлайн…";
-    refs.sendBtn.disabled = true;
-    refs.attachBtn.disabled = true;
-}
-
-function clearComposerLoadingState() {
-    refs.chatInput.placeholder = "Сообщение";
-    refs.sendBtn.disabled = false;
-    refs.attachBtn.disabled = false;
-}
-
-function buildProfileSkeletonHtml() {
-    return `
-        <div class="modal-hero modal-hero-profile skeleton-hero">
-            <div class="modal-hero-avatar skeleton-avatar-shell"><span class="skeleton-avatar-core"></span></div>
-            <div class="modal-hero-copy">
-                <div class="skeleton-line w-16"></div>
-                <div class="skeleton-line w-48 tall"></div>
-                <div class="skeleton-line w-60"></div>
-                <div class="hero-badge-row">
-                    <span class="skeleton-pill"></span>
-                    <span class="skeleton-pill short"></span>
-                </div>
-            </div>
-        </div>
-        <div class="detail-grid detail-grid-quad">
-            <div class="detail-card"><span class="skeleton-line w-30"></span><span class="skeleton-line w-74"></span></div>
-            <div class="detail-card"><span class="skeleton-line w-28"></span><span class="skeleton-line w-68"></span></div>
-            <div class="detail-card"><span class="skeleton-line w-26"></span><span class="skeleton-line w-34"></span></div>
-            <div class="detail-card"><span class="skeleton-line w-24"></span><span class="skeleton-line w-44"></span></div>
-        </div>
-    `;
-}
-
-function buildRoomInfoSkeletonHtml() {
-    return `
-        <div class="modal-hero modal-hero-room skeleton-hero">
-            <div class="modal-hero-avatar skeleton-avatar-shell"><span class="skeleton-avatar-core"></span></div>
-            <div class="modal-hero-copy">
-                <div class="skeleton-line w-18"></div>
-                <div class="skeleton-line w-54 tall"></div>
-                <div class="skeleton-line w-62"></div>
-                <div class="hero-badge-row">
-                    <span class="skeleton-pill"></span>
-                    <span class="skeleton-pill short"></span>
-                    <span class="skeleton-pill short"></span>
-                </div>
-            </div>
-        </div>
-        <div class="detail-grid detail-grid-quad">
-            <div class="detail-card"><span class="skeleton-line w-26"></span><span class="skeleton-line w-60"></span></div>
-            <div class="detail-card"><span class="skeleton-line w-24"></span><span class="skeleton-line w-48"></span></div>
-            <div class="detail-card"><span class="skeleton-line w-22"></span><span class="skeleton-line w-30"></span></div>
-            <div class="detail-card"><span class="skeleton-line w-22"></span><span class="skeleton-line w-28"></span></div>
-        </div>
-        <div class="room-info-card feature-card"><span class="skeleton-line w-18"></span><span class="skeleton-line w-92"></span><span class="skeleton-line w-72"></span></div>
-    `;
-}
-
-function updateModalContent(title, subtitle = "", html = "") {
-    refs.modalTitle.textContent = title;
-    refs.modalSubtitle.textContent = subtitle;
-    refs.modalSubtitle.classList.toggle("hidden", !subtitle);
-    refs.modalBody.innerHTML = html;
-    refs.modalBody.scrollTop = 0;
-}
+function showAuth() { refs.authScreen.classList.remove("hidden"); refs.appShell.classList.add("hidden"); }
+function showApp() { refs.authScreen.classList.add("hidden"); refs.appShell.classList.remove("hidden"); }
 
 async function handleAuthSubmit(event) {
     event.preventDefault();
-    refs.authError.classList.add("hidden");
     refs.authSubmit.disabled = true;
-    refs.authSubmit.dataset.loading = "true";
-    refs.authSubmit.textContent = state.authMode === "register" ? "Создаю аккаунт…" : "Вхожу…";
-
-    const baseUrl = normalizeHomeserver(refs.authHomeserver.value.trim());
-    const usernameRaw = refs.authUsername.value.trim();
-    const password = refs.authPassword.value;
-    const displayName = refs.authDisplayName.value.trim();
-    const enableCrypto = refs.authEnableCrypto.checked;
+    refs.authSubmit.textContent = "Загрузка...";
 
     try {
-        if (!baseUrl) throw new Error("Укажи валидный homeserver URL.");
-        if (!usernameRaw) throw new Error("Укажи логин или Matrix ID.");
-        if (!password) throw new Error("Укажи пароль.");
-
+        const baseUrl = new URL(refs.authHomeserver.value.trim()).origin;
+        const usernameRaw = refs.authUsername.value.trim();
+        const password = refs.authPassword.value;
         const tempClient = sdk.createClient({ baseUrl });
         let response;
 
         if (state.authMode === "register") {
-            const localpart = usernameToLocalpart(usernameRaw);
-            response = await tempClient.registerRequest({
-                username: localpart,
-                password,
-                initial_device_display_name: APP_NAME,
-                inhibit_login: false,
-                refresh_token: true,
-            });
+            response = await tempClient.registerRequest({ username: usernameRaw.replace(/^@/, "").split(":")[0], password, initial_device_display_name: APP_NAME });
         } else {
-            const identifierUser = usernameRaw.startsWith("@") ? usernameRaw : usernameToLocalpart(usernameRaw);
-            response = await tempClient.loginRequest({
-                type: "m.login.password",
-                identifier: { type: "m.id.user", user: identifierUser },
-                user: identifierUser,
-                password,
-                initial_device_display_name: APP_NAME,
-                refresh_token: true,
-            });
+            const user = usernameRaw.startsWith("@") ? usernameRaw : usernameRaw.replace(/^@/, "").split(":")[0];
+            response = await tempClient.loginRequest({ type: "m.login.password", identifier: { type: "m.id.user", user }, password, initial_device_display_name: APP_NAME });
         }
 
-        const session = {
-            baseUrl,
-            userId: response.user_id,
-            accessToken: response.access_token,
-            deviceId: response.device_id,
-            refreshToken: response.refresh_token || null,
-            enableCrypto,
-        };
-
+        const session = { baseUrl, userId: response.user_id, accessToken: response.access_token, deviceId: response.device_id, enableCrypto: refs.authEnableCrypto.checked };
         saveJson(STORAGE_KEYS.session, session);
         await startSession(session);
-
-        if (displayName && state.authMode === "register") {
-            await state.client?.setDisplayName?.(displayName);
-        }
-
-        showStatus(state.authMode === "register" ? "Аккаунт создан и сессия активна." : "Вход выполнен.");
+        if (state.authMode === "register" && refs.authDisplayName.value) await state.client?.setDisplayName?.(refs.authDisplayName.value);
     } catch (error) {
-        const message = parseError(error);
-        refs.authError.textContent = message;
+        refs.authError.textContent = parseError(error);
         refs.authError.classList.remove("hidden");
     } finally {
         refs.authSubmit.disabled = false;
-        refs.authSubmit.dataset.loading = "false";
         refs.authSubmit.textContent = state.authMode === "register" ? "Создать аккаунт" : "Войти";
     }
 }
 
-async function startSession(session, options = {}) {
-    teardownClient();
-    refs.body.classList.remove("mobile-chat-active");
-    refs.emptyState.classList.remove("hidden");
-    refs.chatView.classList.add("hidden");
-    refs.messageContainer.innerHTML = "";
-
+async function startSession(session, opts = {}) {
+    if(state.client) state.client.stopClient();
     state.session = session;
-    state.activeRoomId = state.ui.lastRoomId || null;
-    state.replyToEventId = null;
-    state.editEventId = null;
-    state.currentPublicRooms = [];
-    state.messageSearchResults = [];
-    clearStatus();
-
-    showStatus(options.restoring ? "Восстанавливаю сессию…" : "Подключаюсь к Matrix…", "info", true);
-
-    const client = sdk.createClient({
-        baseUrl: session.baseUrl,
-        accessToken: session.accessToken,
-        userId: session.userId,
-        deviceId: session.deviceId,
-        refreshToken: session.refreshToken || undefined,
-        timelineSupport: true,
-        cryptoCallbacks: {
-            getSecretStorageKey: getSecretStorageKey,
-            cacheSecretStorageKey: cacheSecretStorageKey,
-        },
-    });
-
+    const client = sdk.createClient({ ...session, timelineSupport: true, cryptoCallbacks: { getSecretStorageKey, cacheSecretStorageKey } });
     state.client = client;
-    attachClientListeners(client);
 
-    if (session.enableCrypto !== false) {
-        await initCrypto(client);
-    } else {
-        state.cryptoReady = false;
-        state.cryptoStatus = {
-            enabled: false,
-            secretStorageReady: false,
-            keyBackupReady: false,
-            keyBackupVersion: null,
-            keyBackupTrusted: false,
-            lastError: "Crypto вручную выключен для этой сессии.",
-        };
-    }
-
+    if (session.enableCrypto !== false) await initCrypto(client);
     showApp();
     renderSettings();
-    setSyncVisualState("syncing");
-    renderRoomsSkeleton();
-    renderChatSkeleton();
 
-    client.startClient({
-        initialSyncLimit: 40,
-        lazyLoadMembers: true,
-        includeArchivedRooms: false,
+    client.on(sdk.ClientEvent?.Sync ?? "sync", syncState => {
+        if (["PREPARED", "SYNCING"].includes(syncState)) { renderRooms(); renderChat(); renderSettings(); }
     });
+    client.on(sdk.ClientEvent?.Room ?? "Room", () => { renderRooms(); renderChat(); });
+    client.on(sdk.ClientEvent?.Event ?? "event", () => { renderRooms(); renderChat(); renderSettings(); });
+    client.startClient({ initialSyncLimit: 40 });
 }
 
 async function initCrypto(client) {
@@ -594,1873 +178,179 @@ async function initCrypto(client) {
         await initCryptoWasm();
         await client.initRustCrypto({ useIndexedDB: true });
         state.cryptoReady = true;
-        await recheckCryptoAndBackup({ silent: true });
-
         const crypto = client.getCrypto?.();
-        if (crypto) {
-            try {
-                await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
-                state.cryptoStatus.lastError = "";
-                showStatus("Ключ backup загружен из secret storage.");
-            } catch (error) {
-                state.cryptoStatus.lastError = parseError(error);
-            }
-        }
-    } catch (error) {
-        state.cryptoReady = false;
-        state.cryptoStatus = {
-            enabled: false,
-            secretStorageReady: false,
-            keyBackupReady: false,
-            keyBackupVersion: null,
-            keyBackupTrusted: false,
-            lastError: parseError(error),
-        };
-        showStatus(`E2EE не инициализировался: ${parseError(error)}`, "error", true);
-    }
-}
-
-function attachClientListeners(client) {
-    client.on(CLIENT_EVENT_SYNC, handleSyncState);
-    client.on(CLIENT_EVENT_ROOM, () => {
-        renderRooms();
-        renderChat();
-    });
-    client.on(CLIENT_EVENT_EVENT, () => {
-        renderRooms();
-        renderChat();
-        renderSettings();
-    });
-    client.on(CLIENT_EVENT_ACCOUNT_DATA, () => {
-        renderRooms();
-        renderSettings();
-    });
-    client.on(ROOM_EVENT_TIMELINE, (event, room, toStartOfTimeline) => {
-        if (!room || toStartOfTimeline) return;
-        renderRooms();
-        if (room.roomId === state.activeRoomId) {
-            renderChat();
-            maybeAutoScroll();
-            sendReadReceiptForActiveRoom().catch(console.error);
-        }
-    });
-    client.on(ROOM_EVENT_RECEIPT, () => {
-        renderChat();
-    });
-    client.on(ROOM_MEMBER_EVENT_TYPING, (_event, member) => {
-        if (member?.roomId === state.activeRoomId) renderTypingBar();
-    });
-}
-
-function teardownClient() {
-    if (!state.client) return;
-    try {
-        state.client.removeAllListeners();
-        state.client.stopClient();
-    } catch {
-        // noop
-    }
-    state.client = null;
-}
-
-function handleSyncState(syncState, previousState, data) {
-    state.syncState = syncState;
-
-    if (["PREPARED", "SYNCING", "CATCHUP"].includes(syncState)) {
-        setSyncVisualState("");
-        clearStatus();
-        clearComposerLoadingState();
-        renderRooms();
-        if (!state.activeRoomId) autoOpenPreferredRoom();
-        renderChat();
-        renderSettings();
-        return;
-    }
-
-    if (syncState === "RECONNECTING") {
-        setSyncVisualState("reconnecting");
-        showStatus("Потеряно соединение. Пытаюсь переподключиться…", "error", true);
-        return;
-    }
-
-    if (syncState === "ERROR") {
-        setSyncVisualState("");
-        clearComposerLoadingState();
-        const message = data?.error ? parseError(data.error) : "Ошибка синхронизации.";
-        showStatus(message, "error", true);
-        return;
-    }
-
-    if (syncState === "STOPPED") {
-        setSyncVisualState("");
-        clearComposerLoadingState();
-        showStatus("Синхронизация остановлена.", "error", true);
-    }
-}
-
-async function recheckCryptoAndBackup({ silent = false } = {}) {
-    const crypto = state.client?.getCrypto?.();
-    if (!crypto) {
-        state.cryptoStatus = {
-            enabled: false,
-            secretStorageReady: false,
-            keyBackupReady: false,
-            keyBackupVersion: null,
-            keyBackupTrusted: false,
-            lastError: "Crypto API недоступен.",
-        };
-        renderSettings();
-        return;
-    }
-
-    try {
-        const check = await crypto.checkKeyBackupAndEnable();
-        const info = await crypto.getKeyBackupInfo();
-        const trust = info ? await crypto.isKeyBackupTrusted(info) : null;
-        const secretStorageReady = await crypto.isSecretStorageReady?.().catch(() => false);
-
-        state.cryptoStatus = {
-            enabled: true,
-            secretStorageReady: Boolean(secretStorageReady),
-            keyBackupReady: Boolean(check || info),
-            keyBackupVersion: info?.version || null,
-            keyBackupTrusted: Boolean(
-                trust?.usable || trust?.trusted || trust?.matchesBackup || trust?.backupTrusted,
-            ),
-            lastError: "",
-        };
-
-        if (!silent) showStatus(info ? "Key backup перепроверен." : "На сервере нет key backup.");
-    } catch (error) {
-        state.cryptoStatus = {
-            enabled: true,
-            secretStorageReady: false,
-            keyBackupReady: false,
-            keyBackupVersion: null,
-            keyBackupTrusted: false,
-            lastError: parseError(error),
-        };
-        if (!silent) showStatus(`Не удалось перепроверить key backup: ${parseError(error)}`, "error", true);
-    }
-
-    renderSettings();
+        if(crypto) await crypto.loadSessionBackupPrivateKeyFromSecretStorage().catch(()=>{});
+    } catch (error) { console.error("Crypto error", error); }
 }
 
 function switchTab(tab) {
-    state.ui.activeTab = tab;
-    saveJson(STORAGE_KEYS.ui, state.ui);
-    refs.navItems.forEach((item) => item.classList.toggle("active", item.dataset.tab === tab));
-    Object.entries(refs.tabs).forEach(([key, node]) => node.classList.toggle("active", key === tab));
-}
-
-function setSettings(next) {
-    state.settings = { ...state.settings, ...next };
-    saveJson(STORAGE_KEYS.settings, state.settings);
-    applyLocalSettings();
-    syncSettingsUI();
-}
-
-function applyLocalSettings() {
-    refs.body.classList.toggle("compact-mode", Boolean(state.settings.compactMode));
-}
-
-function syncSettingsUI() {
-    refs.settingReadReceipts.checked = Boolean(state.settings.sendReadReceipts);
-    refs.settingTyping.checked = Boolean(state.settings.sendTyping);
-    refs.settingCompactMode.checked = Boolean(state.settings.compactMode);
-    refs.authEnableCrypto.checked = Boolean(state.settings.enableCrypto);
+    state.ui.activeTab = tab; saveJson(STORAGE_KEYS.ui, state.ui);
+    refs.navItems.forEach(i => i.classList.toggle("active", i.dataset.tab === tab));
+    Object.entries(refs.tabs).forEach(([k, n]) => n.classList.toggle("active", k === tab));
 }
 
 function renderSettings() {
     const me = state.session?.userId || "—";
     refs.settingsProfileCard.innerHTML = `
-        <div class="profile-avatar">${escapeHtml(initialsFromName(me))}</div>
-        <div class="profile-copy">
-            <div class="profile-name">${escapeHtml(state.client?.getUser?.(me)?.displayName || me)}</div>
-            <div class="profile-id">${escapeHtml(me)}</div>
+        <div style="display:flex; gap:12px; align-items:center;">
+            <div class="profile-avatar">${initialsFromName(me)}</div>
+            <div>
+                <div style="font-weight:700;">${escapeHtml(state.client?.getUser?.(me)?.displayName || me)}</div>
+                <div style="font-size:12px; color:var(--text-muted);">${escapeHtml(me)}</div>
+            </div>
         </div>
     `;
-
-    refs.homeserverInfoValue.textContent = state.session?.baseUrl || "—";
-    refs.mxidInfoValue.textContent = state.session?.userId || "—";
-    refs.deviceInfoValue.textContent = state.session?.deviceId || "—";
-
-    if (!state.session) {
-        refs.cryptoStatusValue.textContent = "—";
-        refs.backupStatusValue.textContent = "—";
-        return;
-    }
-
-    refs.cryptoStatusValue.textContent = state.cryptoStatus.enabled
-        ? `Активно${state.cryptoReady ? " / rust" : ""}`
-        : (state.cryptoStatus.lastError || "Выключено");
-
-    const backupParts = [];
-    backupParts.push(state.cryptoStatus.keyBackupReady ? "backup найден" : "backup не найден");
-    if (state.cryptoStatus.keyBackupVersion) backupParts.push(`v${state.cryptoStatus.keyBackupVersion}`);
-    backupParts.push(state.cryptoStatus.keyBackupTrusted ? "trusted" : "not trusted");
-    refs.backupStatusValue.textContent = backupParts.join(" · ");
+    refs.mxidInfoValue.textContent = me;
+    refs.cryptoStatusValue.textContent = state.cryptoReady ? "Активно" : "Отключено";
 }
 
 function renderRooms() {
-    const rooms = getJoinedRoomsSorted();
+    if(!state.client) return;
+    const rooms = state.client.getRooms().filter(r => r.getMyMembership() === "join").sort((a,b) => getRoomSortTimestamp(b) - getRoomSortTimestamp(a));
     const query = refs.roomSearchInput.value.trim().toLowerCase();
-    const filtered = rooms.filter((room) => matchesRoomQuery(room, query));
+    const filtered = rooms.filter(r => getRoomName(r).toLowerCase().includes(query));
 
-    const pinnedIds = new Set(state.ui.pinnedRooms || []);
-    const pinned = filtered.filter((room) => pinnedIds.has(room.roomId));
-    const unpinned = filtered.filter((room) => !pinnedIds.has(room.roomId));
-    const dmRooms = unpinned.filter(isDirectRoom);
-    const normalRooms = unpinned.filter((room) => !isDirectRoom(room));
-    const privateRooms = filtered.filter((room) => isPrivateRoom(room));
-    const joinedPublicRooms = filtered.filter((room) => isPublicRoom(room));
-
-    fillRoomSection(refs.chatPinnedSection, pinned, "Закреплённые");
-    fillRoomSection(refs.chatDmSection, dmRooms, "DM");
-    fillRoomSection(refs.chatRoomsSection, normalRooms, pinned.length || dmRooms.length ? "Остальные комнаты" : "Комнаты");
-    refs.chatEmptyState.classList.toggle("hidden", filtered.length > 0);
-
-    fillRoomSection(refs.privateRoomsSection, privateRooms, privateRooms.length ? "Приватные" : "");
-    refs.privateEmptyState.classList.toggle("hidden", privateRooms.length > 0);
-
-    fillRoomSection(refs.joinedPublicSection, joinedPublicRooms, joinedPublicRooms.length ? "Уже в клиенте" : "");
-    refs.publicEmptyState.classList.toggle("hidden", state.currentPublicRooms.length > 0 || joinedPublicRooms.length > 0);
-    renderPublicDirectory();
+    fillRoomSection(refs.chatRoomsSection, filtered, "");
 }
 
-function fillRoomSection(node, rooms, title = "") {
-    node.innerHTML = "";
-    if (!rooms.length) return;
-
-    if (title) {
-        const titleNode = document.createElement("div");
-        titleNode.className = "section-title";
-        titleNode.textContent = title;
-        node.appendChild(titleNode);
-    }
-
-    rooms.forEach((room) => {
-        node.appendChild(renderRoomItem(room));
-    });
-}
-
-function renderRoomItem(room) {
-    const item = document.createElement("button");
-    item.className = `room-item${room.roomId === state.activeRoomId ? " active" : ""}`;
-    item.dataset.roomId = room.roomId;
-    item.type = "button";
-
-    const lastEvent = getLastRenderableMessage(room);
-    const unread = getUnreadCount(room);
-    const badges = [];
-    if (isEncryptedRoom(room)) badges.push(`<span class="state-pill">E2EE</span>`);
-    if ((state.ui.mutedRooms || []).includes(room.roomId)) badges.push(`<span class="state-pill is-muted">Muted</span>`);
-    if (unread > 0) badges.push(`<span class="unread-badge">${Math.min(unread, 99)}</span>`);
-
-    item.innerHTML = `
-        <div class="room-avatar">${escapeHtml(initialsFromName(getRoomName(room)))}</div>
-        <div class="room-main">
-            <div class="room-top">
-                <div class="room-name">${escapeHtml(getRoomName(room))}</div>
-                <div class="room-time">${escapeHtml(formatTime(getRoomSortTimestamp(room) || Date.now()))}</div>
-            </div>
-            <div class="room-preview">${escapeHtml(getPreviewText(lastEvent, room))}</div>
-            <div class="room-meta-row">${badges.join("")}</div>
-        </div>
-    `;
-
-    return item;
-}
-
-function renderPublicDirectory() {
-    refs.publicDirectorySection.innerHTML = "";
-    if (!state.currentPublicRooms.length) return;
-
-    const titleNode = document.createElement("div");
-    titleNode.className = "section-title";
-    titleNode.textContent = "Директория homeserver";
-    refs.publicDirectorySection.appendChild(titleNode);
-
-    state.currentPublicRooms.forEach((room) => {
+function fillRoomSection(node, rooms, title) {
+    node.innerHTML = title && rooms.length ? `<div class="section-title">${title}</div>` : "";
+    rooms.forEach(r => {
         const item = document.createElement("div");
-        item.className = "public-room-item";
-        item.dataset.publicRoomId = room.room_id || "";
-        item.dataset.publicAlias = room.canonical_alias || room.alias || "";
+        item.className = `room-item ${r.roomId === state.activeRoomId ? "active" : ""}`;
+        item.dataset.roomId = r.roomId;
         item.innerHTML = `
-            <div class="public-avatar">${escapeHtml(initialsFromName(room.name || room.canonical_alias || room.room_id || "P"))}</div>
-            <div class="public-main">
-                <div class="public-top">
-                    <div class="public-name">${escapeHtml(room.name || room.canonical_alias || room.room_id)}</div>
-                    <button class="secondary-btn" data-public-action="join" type="button">Join</button>
+            <div class="room-avatar">${initialsFromName(getRoomName(r))}</div>
+            <div class="room-main">
+                <div class="room-top">
+                    <div class="room-name">${escapeHtml(getRoomName(r))}</div>
                 </div>
-                <div class="public-topic">${escapeHtml(room.topic || room.room_id || "Без topic")}</div>
-                <div class="public-meta-row">
-                    <span class="room-badge">${room.num_joined_members || 0} участников</span>
-                    ${room.world_readable ? '<span class="room-badge">World-readable</span>' : ""}
-                </div>
+                <div class="room-preview">${escapeHtml(getPreviewText(getLastRenderableMessage(r), r))}</div>
             </div>
         `;
-        refs.publicDirectorySection.appendChild(item);
+        node.appendChild(item);
     });
-}
-
-function autoOpenPreferredRoom() {
-    const available = getJoinedRoomsSorted();
-    if (!available.length) return;
-    const room = available.find((entry) => entry.roomId === state.ui.lastRoomId) || available[0];
-    openRoom(room.roomId);
 }
 
 function openRoom(roomId) {
-    const room = state.client?.getRoom(roomId);
-    if (!room) return;
     state.activeRoomId = roomId;
-    state.ui.lastRoomId = roomId;
-    saveJson(STORAGE_KEYS.ui, state.ui);
     refs.emptyState.classList.add("hidden");
     refs.chatView.classList.remove("hidden");
     refs.body.classList.add("mobile-chat-active");
-    state.messageSearchResults = [];
-    refs.messageSearchResults.classList.add("hidden");
-    refs.messageSearchResults.innerHTML = "";
-    renderRooms();
-    renderChat();
-    maybeAutoScroll(true);
-    sendReadReceiptForActiveRoom().catch(console.error);
+    renderRooms(); renderChat();
+    refs.messageContainer.scrollTop = refs.messageContainer.scrollHeight;
 }
 
 function renderChat() {
-    const room = getActiveRoom();
-    clearComposerLoadingState();
+    const room = state.activeRoomId ? state.client?.getRoom(state.activeRoomId) : null;
     refs.composerContext.classList.toggle("hidden", !state.replyToEventId && !state.editEventId);
-    refs.composerContext.innerHTML = buildComposerContextHtml(room);
+    if(!room) return;
 
-    if (!room) {
-        refs.emptyState.classList.remove("hidden");
-        refs.chatView.classList.add("hidden");
-        return;
-    }
-
-    refs.emptyState.classList.add("hidden");
-    refs.chatView.classList.remove("hidden");
     refs.chatHeaderAvatar.textContent = initialsFromName(getRoomName(room));
     refs.chatHeaderTitle.textContent = getRoomName(room);
-    refs.chatHeaderStatus.textContent = buildRoomStatus(room);
-    refs.chatHeaderEncrypted.classList.toggle("hidden", !isEncryptedRoom(room));
+    refs.chatHeaderEncrypted.classList.toggle("hidden", !room.currentState?.getStateEvents?.("m.room.encryption", ""));
 
-    const timeline = getRenderableTimeline(room);
+    const timeline = (room.timeline || []).filter(e => ["m.room.message", "m.room.encrypted"].includes(e.getType()));
     refs.messageContainer.innerHTML = "";
 
-    let previousDateKey = "";
-    let previousSender = "";
-    let previousTs = 0;
+    let prevSender = null;
+    timeline.forEach(event => {
+        const sender = event.getSender();
+        const isMine = sender === state.session.userId;
+        const isContinuation = prevSender === sender;
+        const row = document.createElement("div");
+        row.className = `msg-row ${isMine ? "mine" : ""} ${isContinuation ? "continuation" : ""}`;
+        row.dataset.eventId = event.getId();
 
-    timeline.forEach((event) => {
-        const ts = event.getTs?.() || Date.now();
-        const currentDateKey = new Date(ts).toDateString();
-        if (currentDateKey !== previousDateKey) {
-            const sep = document.createElement("div");
-            sep.className = "date-separator";
-            sep.textContent = formatDateLabel(ts);
-            refs.messageContainer.appendChild(sep);
-            previousDateKey = currentDateKey;
-        }
-
-        const sender = event.getSender?.() || "";
-        const isMine = sender === state.session?.userId;
-        const shouldShowAuthor = !isMine && (!previousSender || previousSender !== sender || ts - previousTs > 6 * 60 * 1000);
-        const messageNode = renderMessageEvent(event, room, { isMine, shouldShowAuthor });
-        refs.messageContainer.appendChild(messageNode);
-
-        previousSender = sender;
-        previousTs = ts;
+        row.innerHTML = `
+            <div class="member-avatar ${isContinuation ? "spacer" : ""}">${isMine ? "" : initialsFromName(sender)}</div>
+            <div class="msg-bubble">
+                ${!isMine && !isContinuation ? `<div class="msg-author">${escapeHtml(sender)}</div>` : ""}
+                <div>${escapeHtml(getEventBody(event))}</div>
+            </div>
+        `;
+        if(isMine) row.querySelector('.member-avatar').remove();
+        refs.messageContainer.appendChild(row);
+        prevSender = sender;
     });
-
-    renderTypingBar();
-}
-
-function renderMessageEvent(event, room, { isMine, shouldShowAuthor }) {
-    const row = document.createElement("div");
-    const isContinuation = !shouldShowAuthor;
-    row.className = `msg-row${isMine ? " mine" : ""}${isContinuation ? " continuation" : ""}`;
-    row.dataset.eventId = event.getId?.() || "";
-    row.dataset.roomId = room.roomId;
-
-    const member = room.getMember?.(event.getSender?.()) || null;
-    const senderName = member?.name || event.getSender?.() || "Unknown";
-    const status = getEventStatusLabel(event);
-    const replyEventId = event.getContent?.()?.["m.relates_to"]?.["m.in_reply_to"]?.event_id || null;
-    const replyHtml = replyEventId ? buildReplyHtml(room, replyEventId) : "";
-    const bodyHtml = buildMessageContentHtml(event);
-
-    row.innerHTML = `
-        <div class="member-avatar${isContinuation && !isMine ? " spacer" : ""}">${escapeHtml(initialsFromName(senderName))}</div>
-        <div class="msg-bubble${replyEventId ? " has-reply" : ""}">
-            ${shouldShowAuthor ? `<div class="msg-author">${escapeHtml(senderName)}</div>` : ""}
-            ${replyHtml}
-            ${bodyHtml}
-            <div class="msg-meta-row">
-                <span class="msg-meta">${escapeHtml(formatTime(event.getTs?.() || Date.now()))}</span>
-                ${status ? `<span class="msg-status ${status.className}">${escapeHtml(status.label)}</span>` : ""}
-            </div>
-        </div>
-    `;
-
-    if (isMine) row.querySelector(".member-avatar")?.remove();
-
-    hydrateMedia(row, event).catch(console.error);
-    return row;
-}
-
-function buildMessageContentHtml(event) {
-    const type = event.getType?.();
-    if (type === "m.room.encrypted") {
-        return `
-            <div class="msg-decrypt">
-                <div class="msg-decrypt-title">Сообщение не расшифровано</div>
-                <div class="msg-decrypt-help">Похоже, ключей этого устройства недостаточно. Загрузи recovery key или включи рабочий key backup.</div>
-                <div>
-                    <button class="secondary-btn" data-inline-action="restore-keys" type="button">Восстановить ключи</button>
-                </div>
-            </div>
-        `;
-    }
-
-    if (type !== "m.room.message") {
-        return `<div class="msg-subtle">${escapeHtml(event.getContent?.()?.body || type || "Событие")}</div>`;
-    }
-
-    const content = event.getContent?.() || {};
-    const msgtype = content.msgtype || "m.text";
-
-    if (msgtype === "m.image") {
-        return `
-            <div>${escapeHtml(content.body || "Изображение")}</div>
-            <div class="msg-media"><img alt="${escapeHtml(content.body || "image")}" data-mxc="${escapeHtml(content.url || "")}"></div>
-        `;
-    }
-
-    if (msgtype === "m.file") {
-        return `
-            <div class="file-card">
-                <div>
-                    <div>${escapeHtml(content.body || "Файл")}</div>
-                    <div class="file-meta">${escapeHtml(content.info?.mimetype || "file")}${content.info?.size ? ` · ${escapeHtml(formatBytes(content.info.size))}` : ""}</div>
-                </div>
-                <a class="file-link" data-mxc-link="${escapeHtml(content.url || "")}" href="#">Открыть</a>
-            </div>
-        `;
-    }
-
-    return `<div>${escapeHtml(getEventBody(event))}</div>`;
-}
-
-function buildReplyHtml(room, replyEventId) {
-    const original = room.findEventById?.(replyEventId) || room.timeline?.find((item) => item.getId?.() === replyEventId);
-    if (!original) {
-        return `<div class="msg-reply">Ответ на сообщение</div>`;
-    }
-    const name = room.getMember?.(original.getSender?.())?.name || original.getSender?.() || "Unknown";
-    return `<div class="msg-reply"><strong>${escapeHtml(name)}</strong><br>${escapeHtml(getEventBody(original).slice(0, 140))}</div>`;
-}
-
-async function hydrateMedia(row, event) {
-    const content = event.getContent?.() || {};
-    const img = row.querySelector("img[data-mxc]");
-    if (img && content.url) {
-        img.src = await getMediaSrc(content.url);
-    }
-
-    const link = row.querySelector("a[data-mxc-link]");
-    if (link && content.url) {
-        link.href = await getMediaSrc(content.url, { forceDownload: true });
-        link.target = "_blank";
-        link.rel = "noreferrer noopener";
-    }
-}
-
-function renderTypingBar() {
-    const room = getActiveRoom();
-    if (!room) {
-        refs.typingBar.classList.add("hidden");
-        refs.typingBar.textContent = "";
-        return;
-    }
-
-    const typing = (room.getTypingMembers?.() || [])
-        .filter((member) => member.userId !== state.session?.userId)
-        .map((member) => member.name || member.userId);
-
-    if (!typing.length) {
-        refs.typingBar.classList.add("hidden");
-        refs.typingBar.textContent = "";
-        return;
-    }
-
-    refs.typingBar.classList.remove("hidden");
-    refs.typingBar.textContent = typing.length === 1
-        ? `${typing[0]} печатает…`
-        : `${typing.slice(0, 2).join(", ")} печатают…`;
-}
-
-function buildRoomStatus(room) {
-    const members = room.getJoinedMembers?.() || [];
-    const parts = [];
-    parts.push(`${members.length || 0} участников`);
-    const topic = getRoomTopic(room);
-    if (topic) parts.push(topic);
-    return parts.join(" · ");
-}
-
-function buildComposerContextHtml(room) {
-    if (!room) return "";
-    if (state.editEventId) {
-        const event = room.findEventById?.(state.editEventId) || room.timeline?.find((item) => item.getId?.() === state.editEventId);
-        return `
-            <strong>Редактирование</strong><br>
-            ${escapeHtml(getEventBody(event).slice(0, 180))}
-            <div class="form-actions">
-                <button class="ghost-btn" data-inline-action="cancel-compose-context" type="button">Отмена</button>
-            </div>
-        `;
-    }
-
-    if (state.replyToEventId) {
-        const event = room.findEventById?.(state.replyToEventId) || room.timeline?.find((item) => item.getId?.() === state.replyToEventId);
-        return `
-            <strong>Ответ</strong><br>
-            ${escapeHtml(getEventBody(event).slice(0, 180))}
-            <div class="form-actions">
-                <button class="ghost-btn" data-inline-action="cancel-compose-context" type="button">Отмена</button>
-            </div>
-        `;
-    }
-
-    return "";
-}
-
-function handleComposerKeydown(event) {
-    if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        sendCurrentMessage();
-    }
-}
-
-function handleComposerInput(event) {
-    event.currentTarget.style.height = "auto";
-    event.currentTarget.style.height = `${Math.min(event.currentTarget.scrollHeight, 140)}px`;
-    if (state.settings.sendTyping) sendTyping();
 }
 
 async function sendCurrentMessage() {
-    const room = getActiveRoom();
-    const client = state.client;
-    if (!room || !client) return;
-
+    if(!state.activeRoomId) return;
     const text = refs.chatInput.value.trim();
-    if (!text) return;
-
-    const content = {
-        msgtype: "m.text",
-        body: text,
-    };
-
-    if (state.replyToEventId) {
-        content["m.relates_to"] = {
-            "m.in_reply_to": { event_id: state.replyToEventId },
-        };
-    }
-
-    if (state.editEventId) {
-        content.body = `* ${text}`;
-        content["m.new_content"] = { msgtype: "m.text", body: text };
-        content["m.relates_to"] = {
-            rel_type: "m.replace",
-            event_id: state.editEventId,
-        };
-    }
-
-    try {
-        await client.sendEvent(room.roomId, "m.room.message", content, "");
-        refs.chatInput.value = "";
-        refs.chatInput.style.height = "auto";
-        clearComposeContext();
-        renderChat();
-        maybeAutoScroll(true);
-    } catch (error) {
-        showStatus(`Сообщение не отправилось: ${parseError(error)}`, "error", true);
-    }
+    if(!text) return;
+    await state.client.sendEvent(state.activeRoomId, "m.room.message", { msgtype: "m.text", body: text }, "");
+    refs.chatInput.value = ""; refs.chatInput.style.height = "auto";
+    renderChat(); refs.messageContainer.scrollTop = refs.messageContainer.scrollHeight;
 }
 
-async function handleAttachmentSelection(event) {
-    const files = Array.from(event.target.files || []);
-    event.target.value = "";
-    if (!files.length) return;
-
-    for (const file of files) {
-        await uploadAndSendFile(file);
-    }
+/* Modals & Helpers */
+function openModal(title, subtitle, html) {
+    refs.modalTitle.textContent = title;
+    refs.modalSubtitle.textContent = subtitle;
+    refs.modalBody.innerHTML = html;
+    refs.modalOverlay.classList.add("active");
 }
+function closeModal() { refs.modalOverlay.classList.remove("active"); }
+function handleRoomListClick(e) { const item = e.target.closest(".room-item"); if(item) openRoom(item.dataset.roomId); }
+function handleRoomContextMenu(e) { e.preventDefault(); const item = e.target.closest(".room-item"); if(item) { state.activeRoomContextId = item.dataset.roomId; openMenu(refs.roomMenu, e.currentTarget.getBoundingClientRect()); } }
+function handleMessageAreaContext(e) { e.preventDefault(); const row = e.target.closest(".msg-row"); if(row) { state.activeMessageEvent = row.dataset.eventId; openMenu(refs.messageMenu, { left: e.clientX, top: e.clientY }); } }
+function openMenu(menu, rect) { closeMenus(); refs.globalOverlay.classList.add("active"); menu.classList.add("active"); menu.style.left = `${rect.left || rect.x}px`; menu.style.top = `${rect.top || rect.y}px`; }
+function closeMenus() { refs.globalOverlay.classList.remove("active"); [refs.composeMenu, refs.roomMenu, refs.messageMenu].forEach(m => m.classList.remove("active")); }
 
-async function uploadAndSendFile(file) {
-    const room = getActiveRoom();
-    const client = state.client;
-    if (!room || !client) return;
-
-    showStatus(`Загружаю ${file.name}…`, "info", true);
-
-    try {
-        const uploadResponse = await client.uploadContent(file, {
-            type: file.type || undefined,
-            name: file.name,
-            includeFilename: true,
-        });
-
-        const mxcUrl = typeof uploadResponse === "string"
-            ? uploadResponse
-            : uploadResponse?.content_uri || uploadResponse?.url || uploadResponse?.contentUri;
-
-        if (!mxcUrl) throw new Error("Homeserver не вернул MXC URL для файла.");
-
-        const isImage = file.type.startsWith("image/");
-        const content = {
-            msgtype: isImage ? "m.image" : "m.file",
-            body: file.name,
-            url: mxcUrl,
-            info: {
-                mimetype: file.type || "application/octet-stream",
-                size: file.size,
-            },
-        };
-
-        await client.sendEvent(room.roomId, "m.room.message", content, "");
-        clearStatus();
-        renderChat();
-        maybeAutoScroll(true);
-    } catch (error) {
-        showStatus(`Ошибка upload: ${parseError(error)}`, "error", true);
-    }
-}
-
-async function loadPublicRooms(query = "") {
-    if (!state.client) return;
-    try {
-        refs.publicDirectorySection.innerHTML = `
-            <div class="section-title">Директория homeserver</div>
-            ${buildRoomSkeletonItems(4)}
-        `;
-        refs.publicEmptyState.classList.add("hidden");
-        showStatus("Загружаю публичные комнаты…", "info", true);
-        const response = await state.client.publicRooms({
-            limit: 30,
-            filter: query ? { generic_search_term: query } : undefined,
-        });
-        state.currentPublicRooms = response.chunk || [];
-        renderRooms();
-        clearStatus();
-    } catch (error) {
-        showStatus(`Не удалось загрузить директорию: ${parseError(error)}`, "error", true);
-    }
-}
-
-function runMessageSearch() {
-    const room = getActiveRoom();
-    if (!room) return;
-
-    const query = refs.messageSearchInput.value.trim().toLowerCase();
-    if (!query) {
-        state.messageSearchResults = [];
-        refs.messageSearchResults.innerHTML = "";
-        refs.messageSearchResults.classList.add("hidden");
-        return;
-    }
-
-    const results = getRenderableTimeline(room)
-        .filter((event) => getEventBody(event).toLowerCase().includes(query))
-        .slice(-30)
-        .reverse();
-
-    state.messageSearchResults = results;
-    refs.messageSearchResults.classList.remove("hidden");
-    refs.messageSearchResults.innerHTML = results.length
-        ? results.map((event) => `
-            <button class="search-result-item" data-result-event-id="${escapeHtml(event.getId?.() || "")}" type="button">
-                <div class="search-result-main">
-                    <div class="search-result-title">${escapeHtml(room.getMember?.(event.getSender?.())?.name || event.getSender?.() || "Unknown")}</div>
-                    <div class="search-result-snippet">${escapeHtml(getEventBody(event).slice(0, 200))}</div>
-                </div>
-            </button>
-        `).join("")
-        : '<div class="empty-list">Совпадений не найдено.</div>';
-}
-
-function handleMessageAreaClick(event) {
-    const inlineAction = event.target.closest("[data-inline-action]");
-    if (inlineAction) {
-        const action = inlineAction.dataset.inlineAction;
-        if (action === "restore-keys") openRestoreKeysModal();
-        if (action === "cancel-compose-context") clearComposeContext();
-        return;
-    }
-
-    const searchResult = event.target.closest("[data-result-event-id]");
-    if (searchResult) {
-        jumpToEvent(searchResult.dataset.resultEventId);
-        return;
-    }
-}
-
-function handleMessageAreaContext(event) {
-    const row = event.target.closest(".msg-row");
-    if (!row) return;
-    event.preventDefault();
-    state.activeMessageEvent = row.dataset.eventId || null;
-    const eventObject = getActiveRoom()?.findEventById?.(state.activeMessageEvent) || getActiveRoom()?.timeline?.find((item) => item.getId?.() === state.activeMessageEvent);
-    const status = getEventStatusLabel(eventObject);
-    refs.retryMessageMenuItem.classList.toggle("hidden", status?.className !== "failed");
-    openMenu(refs.messageMenu, { left: event.clientX, top: event.clientY, width: 0, height: 0 });
-}
-
-function handleRoomContextMenu(event) {
-    const item = event.target.closest(".room-item");
-    if (!item) return;
-    event.preventDefault();
-    state.activeRoomContextId = item.dataset.roomId || null;
-    openMenu(refs.roomMenu, { left: event.clientX, top: event.clientY, width: 0, height: 0 });
-}
-
-function handleRoomListClick(event) {
-    const item = event.target.closest(".room-item");
-    if (!item) return;
-    openRoom(item.dataset.roomId || "");
-}
-
-async function handlePublicListClick(event) {
-    const joinButton = event.target.closest("[data-public-action='join']");
-    if (!joinButton) return;
-    const item = event.target.closest(".public-room-item");
-    if (!item || !state.client) return;
-
-    const roomAddress = item.dataset.publicAlias || item.dataset.publicRoomId;
-    try {
-        await state.client.joinRoom(roomAddress);
-        showStatus("Комната подключена.");
-        renderRooms();
-    } catch (error) {
-        showStatus(`Join не удался: ${parseError(error)}`, "error", true);
-    }
-}
-
-async function handleComposeMenu(event) {
-    const action = event.target.closest("[data-compose-action]")?.dataset.composeAction;
-    if (!action) return;
-    closeMenus();
-
-    if (action === "new-private") return openCreateRoomModal("private");
-    if (action === "new-public") return openCreateRoomModal("public");
-    if (action === "join-public") return openJoinRoomModal();
-    if (action === "restore-keys") return openRestoreKeysModal();
-}
-
-async function handleRoomMenu(event) {
-    const action = event.target.closest("[data-room-action]")?.dataset.roomAction;
-    const roomId = state.activeRoomContextId;
-    const room = roomId ? state.client?.getRoom(roomId) : null;
-    closeMenus();
-    if (!action || !room) return;
-
-    if (action === "toggle-pin") {
-        toggleInList(state.ui.pinnedRooms, roomId);
-        saveJson(STORAGE_KEYS.ui, state.ui);
-        renderRooms();
-        return;
-    }
-
-    if (action === "toggle-mute") {
-        toggleInList(state.ui.mutedRooms, roomId);
-        saveJson(STORAGE_KEYS.ui, state.ui);
-        renderRooms();
-        return;
-    }
-
-    if (action === "info") return openRoomInfo(roomId);
-    if (action === "invite") return openInviteModal(roomId);
-    if (action === "leave") {
-        try {
-            await state.client.leave(roomId);
-            if (state.activeRoomId === roomId) {
-                state.activeRoomId = null;
-                state.ui.lastRoomId = null;
-                saveJson(STORAGE_KEYS.ui, state.ui);
-                refs.body.classList.remove("mobile-chat-active");
-            }
-            renderRooms();
-            renderChat();
-            showStatus("Комната покинута.");
-        } catch (error) {
-            showStatus(`Не удалось выйти из комнаты: ${parseError(error)}`, "error", true);
-        }
-    }
-}
-
-async function handleMessageMenu(event) {
-    const action = event.target.closest("[data-message-action]")?.dataset.messageAction;
-    const room = getActiveRoom();
-    const eventId = state.activeMessageEvent;
-    closeMenus();
-    if (!action || !room || !eventId) return;
-
-    const messageEvent = room.findEventById?.(eventId) || room.timeline?.find((item) => item.getId?.() === eventId);
-    if (!messageEvent) return;
-
-    if (action === "reply") {
-        state.replyToEventId = eventId;
-        state.editEventId = null;
-        renderChat();
-        refs.chatInput.focus();
-        return;
-    }
-
-    if (action === "edit") {
-        refs.chatInput.value = getEventBody(messageEvent);
-        refs.chatInput.dispatchEvent(new Event("input"));
-        state.editEventId = eventId;
-        state.replyToEventId = null;
-        renderChat();
-        refs.chatInput.focus();
-        return;
-    }
-
-    if (action === "copy") {
-        await navigator.clipboard.writeText(getEventBody(messageEvent));
-        showStatus("Текст сообщения скопирован.");
-        return;
-    }
-
-    if (action === "retry") {
-        try {
-            await state.client.resendEvent(messageEvent, room);
-            showStatus("Повторная отправка запущена.");
-        } catch (error) {
-            showStatus(`Retry не удался: ${parseError(error)}`, "error", true);
-        }
-        return;
-    }
-
-    if (action === "delete") {
-        try {
-            await state.client.redactEvent(room.roomId, eventId, undefined, { reason: "Удалено в web-клиенте" });
-            showStatus("Сообщение удалено.");
-        } catch (error) {
-            showStatus(`Не удалось удалить сообщение: ${parseError(error)}`, "error", true);
-        }
-    }
-}
-
-function clearComposeContext() {
-    state.replyToEventId = null;
-    state.editEventId = null;
-    renderChat();
-}
-
-function openMenu(menu, anchorRect) {
-    closeMenus();
-    refs.globalOverlay.classList.add("active");
-    menu.classList.add("active");
-    const menuWidth = 248;
-    const menuHeight = 240;
-    const left = Math.min(window.innerWidth - menuWidth - 12, Math.max(12, anchorRect.left || 12));
-    const top = Math.min(window.innerHeight - menuHeight - 12, Math.max(12, anchorRect.top || 12));
-    menu.style.left = `${left}px`;
-    menu.style.top = `${top}px`;
-}
-
-function closeMenus() {
-    refs.globalOverlay.classList.remove("active");
-    refs.composeMenu.classList.remove("active");
-    refs.roomMenu.classList.remove("active");
-    refs.messageMenu.classList.remove("active");
-}
-
-function getRoomAvatarMxc(room) {
-    return room?.currentState?.getStateEvents?.("m.room.avatar", "")?.getContent?.()?.url
-        || room?.currentState?.getStateEvents?.("im.vector.modular.widgets", "")?.getContent?.()?.avatar_url
-        || "";
-}
-
-async function buildAvatarMarkup(label, mxcUrl = "", className = "modal-hero-avatar") {
-    const initials = escapeHtml(initialsFromName(label || "?"));
-    if (state.settings.showAvatars && mxcUrl) {
-        const src = await getMediaSrc(mxcUrl).catch(() => "");
-        if (src && src !== "#") {
-            return `<div class="${className} avatar-photo"><img src="${escapeHtml(src)}" alt="${escapeHtml(label || "avatar")}"></div>`;
-        }
-    }
-    return `<div class="${className}">${initials}</div>`;
-}
-
-function openModal(title, subtitle = "", html = "") {
-    clearTimeout(state.modalCloseTimer);
-    updateModalContent(title, subtitle, html);
-    refs.body.classList.add("modal-open");
-    refs.modalOverlay.classList.remove("closing");
-    requestAnimationFrame(() => {
-        refs.modalOverlay.classList.add("active");
-    });
-}
-
-function closeModal() {
-    clearTimeout(state.modalCloseTimer);
-    refs.body.classList.remove("modal-open");
-    refs.modalOverlay.classList.remove("active");
-    refs.modalOverlay.classList.add("closing");
-    state.modalCloseTimer = setTimeout(() => {
-        refs.modalOverlay.classList.remove("closing");
-        refs.modalBody.innerHTML = "";
-        refs.modalSubtitle.classList.remove("hidden");
-    }, 220);
-}
-
-function openCreateRoomModal(kind) {
-    const isPublic = kind === "public";
-    openModal(
-        isPublic ? "Новая публичная комната" : "Новая приватная комната",
-        isPublic ? "Создание public room на homeserver" : "Создание private / trusted chat room",
-        `
-            <form class="fieldset" data-modal-form="create-room">
-                <input type="hidden" name="visibility" value="${isPublic ? "public" : "private"}">
-                <label class="field">
-                    <span>Название</span>
-                    <input name="name" type="text" placeholder="Название комнаты" required>
-                </label>
-                <label class="field">
-                    <span>Topic</span>
-                    <textarea name="topic" placeholder="Краткое описание"></textarea>
-                </label>
-                <label class="toggle-row compact">
-                    <input name="encrypted" type="checkbox" ${isPublic ? "" : "checked"}>
-                    <span>Включить E2EE при создании</span>
-                </label>
-                <label class="toggle-row compact">
-                    <input name="dm" type="checkbox" ${isPublic ? "disabled" : ""}>
-                    <span>Считать комнату direct chat</span>
-                </label>
-                <div class="form-actions">
-                    <button class="secondary-btn" type="button" data-inline-action="close-modal">Отмена</button>
-                    <button class="primary-btn" type="submit">Создать</button>
-                </div>
-            </form>
-        `,
-    );
-}
-
-function openJoinRoomModal() {
-    openModal(
-        "Join public room",
-        "Можно указать alias вида #room:server или room id",
-        `
-            <form class="fieldset" data-modal-form="join-room">
-                <label class="field">
-                    <span>Alias / Room ID</span>
-                    <input name="roomAddress" type="text" placeholder="#room:server или !roomid:server" required>
-                </label>
-                <div class="form-actions">
-                    <button class="secondary-btn" type="button" data-inline-action="close-modal">Отмена</button>
-                    <button class="primary-btn" type="submit">Подключиться</button>
-                </div>
-            </form>
-        `,
-    );
-}
-
-function openInviteModal(roomId) {
-    openModal(
-        "Пригласить пользователя",
-        "Matrix invite в выбранную комнату",
-        `
-            <form class="fieldset" data-modal-form="invite-user">
-                <input type="hidden" name="roomId" value="${escapeHtml(roomId)}">
-                <label class="field">
-                    <span>Matrix ID</span>
-                    <input name="userId" type="text" placeholder="@user:server" required>
-                </label>
-                <div class="form-actions">
-                    <button class="secondary-btn" type="button" data-inline-action="close-modal">Отмена</button>
-                    <button class="primary-btn" type="submit">Пригласить</button>
-                </div>
-            </form>
-        `,
-    );
-}
-
-function openEditProfileModal() {
-    const me = state.session?.userId;
-    if (!me) return;
-
-    const currentUser = state.client?.getUser?.(me);
-    openModal(
-        "Редактирование профиля",
-        "Аккуратный профиль без фальшивых настроек: только реальные Matrix-поля и avatar upload.",
-        `
-            <div class="modal-hero compact-hero">
-                <div class="modal-hero-avatar">${escapeHtml(initialsFromName(currentUser?.displayName || me))}</div>
-                <div class="modal-hero-copy">
-                    <div class="modal-kicker">Ваш профиль</div>
-                    <div class="modal-hero-title">${escapeHtml(currentUser?.displayName || me)}</div>
-                    <div class="modal-hero-subtitle">${escapeHtml(me)}</div>
-                    <div class="hero-badge-row">
-                        <span class="state-pill">Display name</span>
-                        <span class="state-pill">Avatar upload</span>
-                    </div>
-                </div>
+function openRoomInfo(roomId) {
+    const room = state.client?.getRoom(roomId); if(!room) return;
+    openModal("Room Info", room.roomId, `
+        <div class="modal-hero">
+            <div class="room-avatar-xl">${initialsFromName(getRoomName(room))}</div>
+            <div class="modal-hero-copy">
+                <div class="modal-hero-title">${escapeHtml(getRoomName(room))}</div>
             </div>
-            <form class="fieldset polished-form" data-modal-form="edit-profile">
-                <div class="section-caption">Параметры профиля</div>
-                <label class="field">
-                    <span>Display name</span>
-                    <input name="displayName" type="text" value="${escapeHtml(currentUser?.displayName || "")}" placeholder="Ваш display name">
-                    <small>Изменится в Matrix-профиле и будет виден другим клиентам.</small>
-                </label>
-                <label class="field">
-                    <span>Avatar</span>
-                    <input name="avatarFile" type="file" accept="image/*">
-                    <small>Поддерживается стандартный upload через Matrix media API.</small>
-                </label>
-                <div class="form-actions sticky-actions">
-                    <button class="secondary-btn" type="button" data-inline-action="close-modal">Отмена</button>
-                    <button class="primary-btn" type="submit">Сохранить профиль</button>
-                </div>
-            </form>
-        `,
-    );
+        </div>
+        <div class="detail-grid">
+            <div class="detail-card"><div class="info-label">Members</div><div class="info-value">${room.getJoinedMembers().length}</div></div>
+            <div class="detail-card"><div class="info-label">Encryption</div><div class="info-value">${room.currentState?.getStateEvents?.("m.room.encryption", "") ? "Enabled" : "Disabled"}</div></div>
+        </div>
+    `);
 }
 
 function openRestoreKeysModal() {
-    openModal(
-        "Восстановление encrypted history",
-        "Оформили сценарий как взрослый системный экран: без фейкового security, только реальные варианты восстановления ключей.",
-        `
-            <div class="modal-hero compact-hero modal-hero-security">
-                <div class="modal-hero-avatar">K</div>
-                <div class="modal-hero-copy">
-                    <div class="modal-kicker">Key backup</div>
-                    <div class="modal-hero-title">Восстановление ключей</div>
-                    <div class="modal-hero-subtitle">${escapeHtml(refs.backupStatusValue.textContent || "—")}</div>
-                    <div class="hero-badge-row">
-                        <span class="state-pill">Secret storage</span>
-                        <span class="state-pill">Recovery key</span>
-                        <span class="state-pill">Passphrase</span>
-                    </div>
-                </div>
+    openModal("Key Backup", "Restore encryption keys", `
+        <form class="fieldset" data-modal-form="restore-keys-from-recovery">
+            <div class="field">
+                <span>Recovery Key</span>
+                <textarea name="recoveryKey" placeholder="EsTc ..."></textarea>
             </div>
-
-            <form class="fieldset polished-form" data-modal-form="restore-keys-from-secret-storage">
-                <div class="section-caption">1. Уже сохранённый ключ</div>
-                <div class="room-info-card tone-card">
-                    <div class="info-value">Если recovery key уже был передан этому браузеру, клиент попробует загрузить backup key из secret storage и включить доступ к старым encrypted messages.</div>
-                </div>
-                <label class="toggle-row compact emphasized-toggle">
-                    <input name="fullRestore" type="checkbox" checked>
-                    <span>Сразу запустить полное restore key backup</span>
-                </label>
-                <div class="form-actions sticky-actions single-action">
-                    <button class="primary-btn" type="submit">Загрузить из secret storage</button>
-                </div>
-            </form>
-
-            <form class="fieldset polished-form" data-modal-form="restore-keys-from-recovery">
-                <div class="section-caption">2. Recovery key</div>
-                <div class="room-info-card tone-card">
-                    <div class="info-value">Предпочтительный путь, если у тебя есть recovery key из другого Matrix-клиента.</div>
-                </div>
-                <label class="field">
-                    <span>Recovery key</span>
-                    <textarea name="recoveryKey" placeholder="EsTc ..."></textarea>
-                </label>
-                <label class="toggle-row compact emphasized-toggle">
-                    <input name="fullRestore" type="checkbox" checked>
-                    <span>Сразу запустить полное restore key backup</span>
-                </label>
-                <div class="form-actions sticky-actions single-action">
-                    <button class="primary-btn" type="submit">Использовать recovery key</button>
-                </div>
-            </form>
-
-            <form class="fieldset polished-form" data-modal-form="restore-keys-from-passphrase">
-                <div class="section-caption">3. Passphrase</div>
-                <div class="room-info-card tone-card muted-card">
-                    <div class="info-value">Запасной сценарий для старых backup-схем. Если есть recovery key, лучше использовать его.</div>
-                </div>
-                <label class="field">
-                    <span>Passphrase</span>
-                    <input name="passphrase" type="password" placeholder="Ваш recovery passphrase">
-                </label>
-                <div class="form-actions sticky-actions single-action">
-                    <button class="primary-btn" type="submit">Использовать passphrase</button>
-                </div>
-            </form>
-        `,
-    );
+            <button class="primary-btn" type="submit">Restore</button>
+        </form>
+    `);
 }
 
-async function openRoomInfo(roomId) {
-    const room = roomId ? state.client?.getRoom(roomId) : null;
-    if (!room) return;
-
-    openModal(getRoomName(room), "Загружаю room info…", buildRoomInfoSkeletonHtml());
-
-    const topic = getRoomTopic(room) || "Без topic";
-    const avatarHtml = await buildAvatarMarkup(getRoomName(room), getRoomAvatarMxc(room), "modal-hero-avatar room-avatar-xl");
-    const memberRows = (room.getJoinedMembers?.() || [])
-        .slice(0, 60)
-        .map((member) => `
-            <div class="member-row" data-user-id="${escapeHtml(member.userId)}">
-                <div class="member-avatar">${escapeHtml(initialsFromName(member.name || member.userId))}</div>
-                <div class="member-main">
-                    <div class="member-name">${escapeHtml(member.name || member.userId)}</div>
-                    <div class="member-id">${escapeHtml(member.userId)}</div>
-                </div>
-            </div>
-        `)
-        .join("");
-
-    updateModalContent(
-        getRoomName(room),
-        room.roomId,
-        `
-            <div class="modal-hero modal-hero-room">
-                ${avatarHtml}
-                <div class="modal-hero-copy">
-                    <div class="modal-kicker">Room info</div>
-                    <div class="modal-hero-title-row">
-                        <div class="modal-hero-title">${escapeHtml(getRoomName(room))}</div>
-                        ${isEncryptedRoom(room) ? '<span class="encrypted-pill">E2EE</span>' : ''}
-                    </div>
-                    <div class="modal-hero-subtitle">${escapeHtml(room.roomId)}</div>
-                    <div class="hero-badge-row">
-                        <span class="state-pill">${isPublicRoom(room) ? "Публичная" : isDirectRoom(room) ? "DM" : "Приватная / групповая"}</span>
-                        <span class="state-pill">${room.getJoinedMembers?.().length || 0} участников</span>
-                        ${getUnreadCount(room) ? `<span class="unread-badge">${Math.min(getUnreadCount(room), 99)}</span>` : ""}
-                    </div>
-                </div>
-            </div>
-
-            <div class="detail-grid detail-grid-quad">
-                <div class="detail-card">
-                    <div class="info-label">Тип</div>
-                    <div class="info-value">${isPublicRoom(room) ? "Публичная" : isDirectRoom(room) ? "DM" : "Приватная / групповая"}</div>
-                </div>
-                <div class="detail-card">
-                    <div class="info-label">Шифрование</div>
-                    <div class="info-value">${isEncryptedRoom(room) ? "Включено" : "Отключено"}</div>
-                </div>
-                <div class="detail-card">
-                    <div class="info-label">Участников</div>
-                    <div class="info-value">${room.getJoinedMembers?.().length || 0}</div>
-                </div>
-                <div class="detail-card">
-                    <div class="info-label">Unread</div>
-                    <div class="info-value">${getUnreadCount(room)}</div>
-                </div>
-            </div>
-
-            <div class="room-info-card feature-card">
-                <div class="info-label">Topic</div>
-                <div class="info-value">${escapeHtml(topic)}</div>
-            </div>
-
-            <form class="fieldset polished-form" data-modal-form="edit-room">
-                <input type="hidden" name="roomId" value="${escapeHtml(room.roomId)}">
-                <div class="section-caption">Настройки комнаты</div>
-                <label class="field">
-                    <span>Название комнаты</span>
-                    <input name="name" type="text" value="${escapeHtml(getRoomName(room))}">
-                </label>
-                <label class="field">
-                    <span>Topic</span>
-                    <textarea name="topic">${escapeHtml(topic === "Без topic" ? "" : topic)}</textarea>
-                </label>
-                <div class="form-actions sticky-actions">
-                    <button class="primary-btn" type="submit">Сохранить room info</button>
-                </div>
-            </form>
-
-            <div class="section-caption">Участники</div>
-            <div class="member-list member-list-card">${memberRows || '<div class="empty-list">Участники не загружены.</div>'}</div>
-            <div class="inline-actions action-grid">
-                <button class="secondary-btn" data-room-inline="invite" data-room-id="${escapeHtml(room.roomId)}" type="button">Пригласить</button>
-                <button class="ghost-btn" data-room-inline="leave" data-room-id="${escapeHtml(room.roomId)}" type="button">Покинуть</button>
-            </div>
-        `,
-    );
-}
-
-async function openUserProfile(userId) {
-    if (!userId || !state.client) return;
-
-    openModal("Профиль", "Загружаю информацию о пользователе…", buildProfileSkeletonHtml());
-
-    (async () => {
-        try {
-            const profile = await state.client.getProfileInfo(userId).catch(() => ({}));
-            const sharedCount = getJoinedRoomsSorted().filter((room) => room.getJoinedMembers?.().some((member) => member.userId === userId)).length;
-            const avatarHtml = await buildAvatarMarkup(
-                profile.displayname || userId,
-                profile.avatar_url || state.client.getUser?.(userId)?.avatarUrl || "",
-                "modal-hero-avatar profile-avatar-xl",
-            );
-            const blocked = (state.ui.blockedUsers || []).includes(userId);
-
-            updateModalContent(
-                profile.displayname || userId,
-                userId,
-                `
-                    <div class="modal-hero modal-hero-profile">
-                        ${avatarHtml}
-                        <div class="modal-hero-copy">
-                            <div class="modal-kicker">User profile</div>
-                            <div class="modal-hero-title">${escapeHtml(profile.displayname || userId)}</div>
-                            <div class="modal-hero-subtitle">${escapeHtml(userId)}</div>
-                            <div class="hero-badge-row">
-                                <span class="state-pill">Shared rooms ${sharedCount}</span>
-                                ${blocked ? '<span class="state-pill is-muted">Blocked</span>' : '<span class="state-pill">Доступен для DM</span>'}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="detail-grid detail-grid-quad">
-                        <div class="detail-card">
-                            <div class="info-label">Display name</div>
-                            <div class="info-value">${escapeHtml(profile.displayname || "Не задан")}</div>
-                        </div>
-                        <div class="detail-card">
-                            <div class="info-label">Matrix ID</div>
-                            <div class="info-value">${escapeHtml(userId)}</div>
-                        </div>
-                        <div class="detail-card">
-                            <div class="info-label">Shared rooms</div>
-                            <div class="info-value">${sharedCount}</div>
-                        </div>
-                        <div class="detail-card">
-                            <div class="info-label">Статус</div>
-                            <div class="info-value">${blocked ? "Локально заблокирован" : "Активен"}</div>
-                        </div>
-                    </div>
-
-                    <div class="room-info-card feature-card muted-card">
-                        <div class="info-label">Что умеет этот экран</div>
-                        <div class="info-value">Открывает реальный Matrix-профиль, позволяет начать DM и локально скрыть пользователя без фейковых server-side обещаний.</div>
-                    </div>
-
-                    <div class="inline-actions action-grid wide-actions">
-                        <button class="primary-btn" data-user-inline="start-dm" data-user-id="${escapeHtml(userId)}" type="button">Начать диалог</button>
-                        <button class="ghost-btn" data-user-inline="toggle-block" data-user-id="${escapeHtml(userId)}" type="button">${blocked ? "Разблокировать" : "Заблокировать"}</button>
-                    </div>
-                `,
-            );
-        } catch (error) {
-            showStatus(`Профиль не открылся: ${parseError(error)}`, "error", true);
-        }
-    })();
-}
-
-async function handleModalActions(event) {
-    const closeButton = event.target.closest("[data-inline-action='close-modal']");
-    if (closeButton) {
-        closeModal();
-        return;
-    }
-
-    const memberRow = event.target.closest(".member-row[data-user-id]");
-    if (memberRow) {
-        openUserProfile(memberRow.dataset.userId || "");
-        return;
-    }
-
-    const roomInline = event.target.closest("[data-room-inline]");
-    if (roomInline) {
-        const roomId = roomInline.dataset.roomId || "";
-        if (roomInline.dataset.roomInline === "invite") return openInviteModal(roomId);
-        if (roomInline.dataset.roomInline === "leave") {
-            closeModal();
-            try {
-                await state.client.leave(roomId);
-                if (state.activeRoomId === roomId) {
-                    state.activeRoomId = null;
-                    state.ui.lastRoomId = null;
-                    saveJson(STORAGE_KEYS.ui, state.ui);
-                    refs.body.classList.remove("mobile-chat-active");
-                }
-                renderRooms();
-                renderChat();
-                showStatus("Комната покинута.");
-            } catch (error) {
-                showStatus(`Не удалось выйти из комнаты: ${parseError(error)}`, "error", true);
-            }
-            return;
-        }
-    }
-
-    const userInline = event.target.closest("[data-user-inline]");
-    if (userInline) {
-        const userId = userInline.dataset.userId || "";
-        if (userInline.dataset.userInline === "start-dm") {
-            await startDirectChat(userId);
-            closeModal();
-            return;
-        }
-        if (userInline.dataset.userInline === "toggle-block") {
-            toggleBlockedUser(userId);
-            closeModal();
-            return openUserProfile(userId);
-        }
+async function handleModalSubmit(e) {
+    e.preventDefault(); const form = e.target;
+    if(form.dataset.modalForm === "restore-keys-from-recovery") {
+        const decoded = decodeRecoveryKey(form.recoveryKey.value.trim());
+        state.secretStorageKey = { keyId: null, privateKey: decoded };
+        persistSecretStorageKey(state.secretStorageKey);
+        closeModal(); showStatus("Keys updated.");
     }
 }
-
-function handleModalChanges(event) {
-    if (event.target.name === "avatarFile") {
-        const file = event.target.files?.[0];
-        if (!file) return;
-        const hint = document.createElement("div");
-        hint.className = "room-meta";
-        hint.textContent = `Выбран файл: ${file.name}`;
-        event.target.closest("form")?.appendChild(hint);
-    }
-}
-
-async function handleModalSubmit(event) {
-    const form = event.target.closest("form[data-modal-form]");
-    if (!form) return;
-    event.preventDefault();
-
-    const action = form.dataset.modalForm;
-    const formData = new FormData(form);
-
-    try {
-        if (action === "create-room") {
-            const visibility = String(formData.get("visibility") || "private");
-            const encrypted = formData.get("encrypted") === "on";
-            const dm = formData.get("dm") === "on";
-            const response = await state.client.createRoom({
-                name: String(formData.get("name") || ""),
-                topic: String(formData.get("topic") || ""),
-                visibility,
-                preset: visibility === "public" ? "public_chat" : (dm ? "trusted_private_chat" : "private_chat"),
-                is_direct: dm,
-                initial_state: encrypted ? [{ type: "m.room.encryption", state_key: "", content: { algorithm: "m.megolm.v1.aes-sha2" } }] : [],
-            });
-            closeModal();
-            renderRooms();
-            openRoom(response.room_id);
-            showStatus("Комната создана.");
-            return;
-        }
-
-        if (action === "join-room") {
-            await state.client.joinRoom(String(formData.get("roomAddress") || ""));
-            closeModal();
-            renderRooms();
-            showStatus("Подключение к комнате выполнено.");
-            return;
-        }
-
-        if (action === "invite-user") {
-            await state.client.invite(String(formData.get("roomId") || ""), String(formData.get("userId") || ""));
-            closeModal();
-            showStatus("Инвайт отправлен.");
-            return;
-        }
-
-        if (action === "edit-profile") {
-            const displayName = String(formData.get("displayName") || "").trim();
-            const avatarFile = formData.get("avatarFile");
-            if (displayName) await state.client.setDisplayName(displayName);
-            if (avatarFile instanceof File && avatarFile.size > 0) {
-                const uploadResponse = await state.client.uploadContent(avatarFile, {
-                    type: avatarFile.type || undefined,
-                    name: avatarFile.name,
-                    includeFilename: true,
-                });
-                const mxcUrl = typeof uploadResponse === "string"
-                    ? uploadResponse
-                    : uploadResponse?.content_uri || uploadResponse?.url || uploadResponse?.contentUri;
-                if (mxcUrl) await state.client.setAvatarUrl(mxcUrl);
-            }
-            closeModal();
-            renderSettings();
-            renderRooms();
-            showStatus("Профиль обновлён.");
-            return;
-        }
-
-        if (action === "edit-room") {
-            const roomId = String(formData.get("roomId") || "");
-            await state.client.setRoomName(roomId, String(formData.get("name") || ""));
-            await state.client.setRoomTopic(roomId, String(formData.get("topic") || ""));
-            closeModal();
-            renderRooms();
-            renderChat();
-            showStatus("Room info обновлён.");
-            return;
-        }
-
-        if (action === "restore-keys-from-secret-storage") {
-            const fullRestore = formData.get("fullRestore") === "on";
-            await restoreKeysFromSecretStorage(fullRestore);
-            closeModal();
-            return;
-        }
-
-        if (action === "restore-keys-from-recovery") {
-            const recoveryKey = String(formData.get("recoveryKey") || "").trim();
-            const fullRestore = formData.get("fullRestore") === "on";
-            await restoreKeysFromRecoveryKey(recoveryKey, fullRestore);
-            closeModal();
-            return;
-        }
-
-        if (action === "restore-keys-from-passphrase") {
-            const passphrase = String(formData.get("passphrase") || "").trim();
-            await restoreKeysFromPassphrase(passphrase);
-            closeModal();
-        }
-    } catch (error) {
-        showStatus(parseError(error), "error", true);
-    }
-}
-
-async function restoreKeysFromSecretStorage(fullRestore = true) {
-    const crypto = state.client?.getCrypto?.();
-    if (!crypto) throw new Error("Crypto API недоступен.");
-
-    showStatus("Пробую загрузить backup key из secret storage…", "info", true);
-    await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
-    await recheckCryptoAndBackup({ silent: true });
-
-    if (fullRestore) {
-        showStatus("Запускаю полное восстановление key backup…", "info", true);
-        await crypto.restoreKeyBackup();
-    }
-
-    renderChat();
-    showStatus("Ключи восстановлены. Повтори открытие комнаты с зашифрованной историей.");
-}
-
-async function restoreKeysFromRecoveryKey(recoveryKey, fullRestore = true) {
-    if (!recoveryKey) throw new Error("Вставь recovery key.");
-
-    const decoded = decodeRecoveryKey(recoveryKey.replace(/\s+/g, " ").trim());
-    state.secretStorageKey = { keyId: null, privateKey: decoded };
-    persistSecretStorageKey(state.secretStorageKey);
-
-    await restoreKeysFromSecretStorage(fullRestore);
-}
-
-async function restoreKeysFromPassphrase(passphrase) {
-    if (!passphrase) throw new Error("Введи passphrase.");
-    const crypto = state.client?.getCrypto?.();
-    if (!crypto) throw new Error("Crypto API недоступен.");
-
-    showStatus("Пробую восстановить key backup через passphrase…", "info", true);
-    await crypto.restoreKeyBackupWithPassphrase(passphrase);
-    await recheckCryptoAndBackup({ silent: true });
-    renderChat();
-    showStatus("Passphrase принята. Ключи backup восстановлены.");
-}
-
-async function startDirectChat(userId) {
-    if (!state.client) return;
-    const existing = getJoinedRoomsSorted().find((room) => isDirectRoom(room) && room.getJoinedMembers?.().some((member) => member.userId === userId));
-    if (existing) {
-        openRoom(existing.roomId);
-        return;
-    }
-
-    const response = await state.client.createRoom({
-        is_direct: true,
-        invite: [userId],
-        preset: "trusted_private_chat",
-        initial_state: [{ type: "m.room.encryption", state_key: "", content: { algorithm: "m.megolm.v1.aes-sha2" } }],
-    });
-    openRoom(response.room_id);
-    showStatus("Direct room создана.");
-}
-
-function toggleBlockedUser(userId) {
-    toggleInList(state.ui.blockedUsers, userId);
-    saveJson(STORAGE_KEYS.ui, state.ui);
-
-    if (state.client?.setIgnoredUsers) {
-        state.client.setIgnoredUsers(state.ui.blockedUsers).catch(console.error);
-    }
-}
-
-async function logout() {
-    teardownClient();
-    clearSession();
-    state.session = null;
-    state.activeRoomId = null;
-    refs.body.classList.remove("mobile-chat-active");
-    showAuth();
-    renderRooms();
-    renderChat();
-    renderSettings();
-    showStatus("Сессия завершена.");
-}
-
-function clearSession() {
-    localStorage.removeItem(STORAGE_KEYS.session);
-    sessionStorage.removeItem(SESSION_SECRET_STORAGE_KEY);
-    state.secretStorageKey = null;
-}
-
-function handleTimelineScroll() {
-    if (refs.messageContainer.scrollTop > 80) return;
-    const room = getActiveRoom();
-    if (!room || !state.client) return;
-    state.client.scrollback(room, 30).then((didPaginate) => {
-        if (didPaginate) {
-            const previousHeight = refs.messageContainer.scrollHeight;
-            renderChat();
-            const nextHeight = refs.messageContainer.scrollHeight;
-            refs.messageContainer.scrollTop = nextHeight - previousHeight;
-        }
-    }).catch(console.error);
-}
-
-function maybeAutoScroll(force = false) {
-    if (force) {
-        refs.messageContainer.scrollTop = refs.messageContainer.scrollHeight;
-        return;
-    }
-    const nearBottom = refs.messageContainer.scrollHeight - refs.messageContainer.scrollTop - refs.messageContainer.clientHeight < 120;
-    if (nearBottom) refs.messageContainer.scrollTop = refs.messageContainer.scrollHeight;
-}
-
-async function sendReadReceiptForActiveRoom() {
-    if (!state.settings.sendReadReceipts || !state.client) return;
-    const room = getActiveRoom();
-    if (!room) return;
-    const lastEvent = [...getRenderableTimeline(room)].reverse().find((event) => event.getSender?.() !== state.session?.userId);
-    if (!lastEvent) return;
-
-    if (typeof state.client.sendReadReceipt === "function") {
-        await state.client.sendReadReceipt(lastEvent);
-        return;
-    }
-
-    if (typeof state.client.setRoomReadMarkers === "function") {
-        await state.client.setRoomReadMarkers(room.roomId, lastEvent.getId?.(), lastEvent.getId?.());
-    }
-}
-
-function sendTyping() {
-    if (!state.settings.sendTyping || !state.client || !state.activeRoomId) return;
-
-    state.client.sendTyping(state.activeRoomId, true, 4000).catch(() => {});
-    clearTimeout(state.typingTimeout);
-    state.typingTimeout = setTimeout(() => {
-        state.client?.sendTyping?.(state.activeRoomId, false, 0).catch(() => {});
-    }, 3500);
-}
-
-function jumpToEvent(eventId) {
-    if (!eventId) return;
-    const node = refs.messageContainer.querySelector(`[data-event-id="${CSS.escape(eventId)}"]`);
-    if (!node) return;
-    node.scrollIntoView({ behavior: "smooth", block: "center" });
-    node.animate([
-        { backgroundColor: "rgba(196,59,54,.24)" },
-        { backgroundColor: "transparent" },
-    ], { duration: 900, easing: "ease-out" });
-}
-
-function getRenderableTimeline(room) {
-    return (room?.timeline || []).filter((event) => {
-        const type = event.getType?.();
-        if (!type) return false;
-        if (type === "m.room.message" || type === "m.room.encrypted") {
-            const rel = event.getContent?.()?.["m.relates_to"];
-            if (rel?.rel_type === "m.replace") return false;
-            return true;
-        }
-        return false;
-    });
-}
-
-function getEventBody(event) {
-    if (!event) return "";
-    const content = event.getContent?.() || {};
-    if (event.getType?.() === "m.room.encrypted") return content.body || "Зашифрованное сообщение";
-    if (content["m.new_content"]?.body) return content["m.new_content"].body;
-    return content.body || content.filename || "";
-}
-
-function getPreviewText(event, room) {
-    if (!event) return isEncryptedRoom(room) ? "Encrypted room" : "Сообщений пока нет";
-    if (event.getType?.() === "m.room.encrypted") return "Не расшифровано";
-    const body = getEventBody(event).replace(/\s+/g, " ").trim();
-    const sender = event.getSender?.() === state.session?.userId ? "Вы" : (room.getMember?.(event.getSender?.())?.name || event.getSender?.() || "");
-    return `${sender ? `${sender}: ` : ""}${body || "Сообщение"}`;
-}
-
-function getLastRenderableMessage(room) {
-    return [...getRenderableTimeline(room)].reverse().find(Boolean) || null;
-}
-
-function getRoomName(room) {
-    return room?.name || room?.getCanonicalAlias?.() || room?.roomId || "Room";
-}
-
-function getRoomTopic(room) {
-    return room?.currentState?.getStateEvents?.("m.room.topic", "")?.getContent?.()?.topic || "";
-}
-
-function getRoomSortTimestamp(room) {
-    return getLastRenderableMessage(room)?.getTs?.() || room?.getLastActiveTimestamp?.() || 0;
-}
-
-function getJoinedRoomsSorted() {
-    if (!state.client) return [];
-    return state.client.getRooms()
-        .filter((room) => room.getMyMembership?.() === "join")
-        .filter((room) => !(state.ui.blockedUsers || []).some((userId) => room.getJoinedMembers?.().some((member) => member.userId === userId)))
-        .sort((a, b) => getRoomSortTimestamp(b) - getRoomSortTimestamp(a));
-}
-
-function matchesRoomQuery(room, query) {
-    if (!query) return true;
-    const haystack = [
-        getRoomName(room),
-        getRoomTopic(room),
-        room.roomId,
-        getPreviewText(getLastRenderableMessage(room), room),
-    ].join(" ").toLowerCase();
-    return haystack.includes(query);
-}
-
-function isEncryptedRoom(room) {
-    return Boolean(room?.currentState?.getStateEvents?.("m.room.encryption", ""));
-}
-
-function isPublicRoom(room) {
-    const joinRule = room?.currentState?.getStateEvents?.("m.room.join_rules", "")?.getContent?.()?.join_rule;
-    return joinRule === "public" || Boolean(room?.getCanonicalAlias?.());
-}
-
-function isPrivateRoom(room) {
-    return !isPublicRoom(room) && !isDirectRoom(room);
-}
-
-function isDirectRoom(room) {
-    const directMap = state.client?.getAccountData?.("m.direct")?.getContent?.() || {};
-    const isMapped = Object.values(directMap).some((roomIds) => Array.isArray(roomIds) && roomIds.includes(room.roomId));
-    if (isMapped) return true;
-
-    const joined = room.getJoinedMembers?.() || [];
-    const others = joined.filter((member) => member.userId !== state.session?.userId);
-    return others.length === 1 && joined.length <= 2;
-}
-
-function getUnreadCount(room) {
-    try {
-        return room.getUnreadNotificationCount?.("total") ?? room.getUnreadNotificationCount?.() ?? 0;
-    } catch {
-        return 0;
-    }
-}
-
-function getEventStatusLabel(event) {
-    if (!event) return null;
-    const status = event.status;
-    if (!status) return null;
-    const sending = sdk.EventStatus?.SENDING ?? "sending";
-    const queued = sdk.EventStatus?.QUEUED ?? "queued";
-    const notSent = sdk.EventStatus?.NOT_SENT ?? "not_sent";
-    const cancelled = sdk.EventStatus?.CANCELLED ?? "cancelled";
-
-    if (status === sending || status === queued) return { label: "sending", className: "sending" };
-    if (status === notSent || status === cancelled) return { label: "failed", className: "failed" };
-    return { label: "sent", className: "sent" };
-}
-
-async function getMediaSrc(mxcUrl, { forceDownload = false } = {}) {
-    if (!state.client || !mxcUrl) return "#";
-    const cacheKey = `${mxcUrl}:${forceDownload ? "download" : "view"}`;
-    if (state.mediaCache.has(cacheKey)) return state.mediaCache.get(cacheKey);
-
-    const httpUrl = state.client.mxcUrlToHttp(mxcUrl, undefined, undefined, undefined, false, true, true)
-        || state.client.mxcUrlToHttp(mxcUrl)
-        || "#";
-
-    try {
-        const response = await fetch(httpUrl, {
-            headers: state.client.getAccessToken?.()
-                ? { Authorization: `Bearer ${state.client.getAccessToken()}` }
-                : undefined,
-        });
-        const blob = await response.blob();
-        const objectUrl = URL.createObjectURL(blob);
-        state.mediaCache.set(cacheKey, objectUrl);
-        return objectUrl;
-    } catch {
-        state.mediaCache.set(cacheKey, httpUrl);
-        return httpUrl;
-    }
-}
-
-async function getSecretStorageKey(opts) {
-    if (!state.secretStorageKey?.privateKey) return null;
-    const keys = Object.keys(opts?.keys || {});
-    if (!keys.length) return null;
-
-    const selectedKeyId = state.secretStorageKey.keyId && keys.includes(state.secretStorageKey.keyId)
-        ? state.secretStorageKey.keyId
-        : keys[0];
-
-    return [selectedKeyId, state.secretStorageKey.privateKey];
-}
-
-function cacheSecretStorageKey(keyId, _keyInfo, key) {
-    state.secretStorageKey = { keyId, privateKey: key };
-    persistSecretStorageKey(state.secretStorageKey);
-}
-
-function persistSecretStorageKey(payload) {
-    if (!payload?.privateKey) return;
-    sessionStorage.setItem(SESSION_SECRET_STORAGE_KEY, JSON.stringify({
-        keyId: payload.keyId || null,
-        privateKey: bytesToBase64(payload.privateKey),
-    }));
-}
-
-function loadSecretStorageKey() {
-    try {
-        const raw = sessionStorage.getItem(SESSION_SECRET_STORAGE_KEY);
-        if (!raw) return null;
-        const parsed = JSON.parse(raw);
-        return {
-            keyId: parsed.keyId || null,
-            privateKey: base64ToBytes(parsed.privateKey),
-        };
-    } catch {
-        return null;
-    }
-}
-
-function toggleInList(list, value) {
-    const index = list.indexOf(value);
-    if (index >= 0) list.splice(index, 1);
-    else list.unshift(value);
-}
-
-function getActiveRoom() {
-    return state.activeRoomId ? state.client?.getRoom(state.activeRoomId) || null : null;
-}
-
-function normalizeHomeserver(value) {
-    if (!value) return "";
-    try {
-        const url = new URL(value);
-        return url.origin;
-    } catch {
-        return "";
-    }
-}
-
-function usernameToLocalpart(input) {
-    return String(input).replace(/^@/, "").split(":")[0];
-}
-
-function formatTime(timestamp) {
-    const date = new Date(Number(timestamp) || Date.now());
-    return date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-}
-
-function formatDateLabel(timestamp) {
-    return new Date(Number(timestamp) || Date.now()).toLocaleDateString("ru-RU", {
-        day: "2-digit",
-        month: "long",
-        year: "numeric",
-    });
-}
-
-function formatBytes(bytes) {
-    if (!bytes) return "0 B";
-    const units = ["B", "KB", "MB", "GB"];
-    let value = bytes;
-    let unit = 0;
-    while (value >= 1024 && unit < units.length - 1) {
-        value /= 1024;
-        unit += 1;
-    }
-    return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
-}
-
-function escapeHtml(value = "") {
-    return String(value)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/\"/g, "&quot;")
-        .replace(/'/g, "&#39;");
-}
-
-function initialsFromName(name = "?") {
-    const clean = String(name).replace(/^[@#!]/, "").trim();
-    if (!clean) return "?";
-    const parts = clean.split(/[\s._:-]+/).filter(Boolean);
-    return (parts.slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || clean[0]?.toUpperCase() || "?");
-}
-
-function parseError(error) {
-    if (!error) return "Неизвестная ошибка.";
-    if (typeof error === "string") return error;
-    if (error.errcode) return `${error.errcode}: ${error.message || "Ошибка Matrix API"}`;
-    return error.message || String(error);
-}
-
-function showStatus(text, mode = "info", sticky = false) {
-    refs.statusBanner.textContent = text;
-    refs.statusBanner.dataset.mode = mode;
-    refs.statusBanner.classList.toggle("is-sticky", sticky);
-    refs.statusBanner.classList.remove("hidden");
-    refs.statusBanner.style.background = mode === "error" ? "rgba(58, 18, 18, 0.98)" : "var(--bg-elevated)";
-    refs.statusBanner.style.borderColor = mode === "error" ? "rgba(255, 125, 119, 0.35)" : "var(--border)";
-    refs.statusBanner.style.color = mode === "error" ? "#ffb0ab" : "var(--text-main)";
-    clearTimeout(showStatus.timer);
-    if (!sticky) showStatus.timer = setTimeout(() => refs.statusBanner.classList.add("hidden"), 3200);
-}
-
-function clearStatus() {
-    clearTimeout(showStatus.timer);
-    refs.statusBanner.classList.add("hidden");
-    refs.statusBanner.classList.remove("is-sticky");
-}
-
-function loadJson(key, fallback) {
-    try {
-        const raw = localStorage.getItem(key);
-        if (!raw) return fallback ? structuredClone(fallback) : null;
-        return fallback ? { ...structuredClone(fallback), ...JSON.parse(raw) } : JSON.parse(raw);
-    } catch {
-        return fallback ? structuredClone(fallback) : null;
-    }
-}
-
-function saveJson(key, value) {
-    localStorage.setItem(key, JSON.stringify(value));
-}
-
-function bytesToBase64(uint8) {
-    let binary = "";
-    uint8.forEach((byte) => {
-        binary += String.fromCharCode(byte);
-    });
-    return btoa(binary);
-}
-
-function base64ToBytes(base64) {
-    const binary = atob(base64);
-    return Uint8Array.from(binary, (char) => char.charCodeAt(0));
-}
+function handleModalActions(e) { if(e.target.closest("[data-inline-action='close-modal']")) closeModal(); }
+function handleComposeMenu(e) {} function handleRoomMenu(e) {} function handleMessageMenu(e) {} function handleAttachmentSelection(e) {} function handleTimelineScroll() {} function handlePublicListClick(e) {} function loadPublicRooms() {}
+
+function getRoomName(r) { return r?.name || r?.roomId || "Room"; }
+function getPreviewText(e, r) { return e ? getEventBody(e) : "No messages"; }
+function getEventBody(e) { const content = e?.getContent() || {}; return e.getType() === "m.room.encrypted" ? "Encrypted" : (content.body || ""); }
+function getLastRenderableMessage(r) { return [...(r?.timeline||[])].reverse().find(e => ["m.room.message", "m.room.encrypted"].includes(e.getType())); }
+function getRoomSortTimestamp(r) { return getLastRenderableMessage(r)?.getTs() || 0; }
+function initialsFromName(n) { return (n||"?").replace(/^[@#!]/,"").trim()[0]?.toUpperCase() || "?"; }
+function escapeHtml(v) { return String(v||"").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+function parseError(e) { return e?.message || String(e); }
+function showStatus(t, m="info") { refs.statusBanner.textContent = t; refs.statusBanner.classList.remove("hidden"); setTimeout(()=>refs.statusBanner.classList.add("hidden"), 3000); }
+function loadJson(k, f) { try { return JSON.parse(localStorage.getItem(k)) || f; } catch { return f; } }
+function saveJson(k, v) { localStorage.setItem(k, JSON.stringify(v)); }
+function getSecretStorageKey() { return state.secretStorageKey?.privateKey ? [state.secretStorageKey.keyId, state.secretStorageKey.privateKey] : null; }
+function cacheSecretStorageKey(keyId, _, key) { state.secretStorageKey = { keyId, privateKey: key }; persistSecretStorageKey(state.secretStorageKey); }
+function persistSecretStorageKey(payload) { sessionStorage.setItem(SESSION_SECRET_STORAGE_KEY, JSON.stringify({ keyId: payload.keyId, privateKey: btoa(String.fromCharCode(...payload.privateKey)) })); }
+function loadSecretStorageKey() { try { const p = JSON.parse(sessionStorage.getItem(SESSION_SECRET_STORAGE_KEY)); return p ? { keyId: p.keyId, privateKey: Uint8Array.from(atob(p.privateKey), c => c.charCodeAt(0)) } : null; } catch { return null; } }
+async function logout() { localStorage.removeItem(STORAGE_KEYS.session); location.reload(); }
