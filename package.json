@@ -1,7 +1,7 @@
 {
   "name": "app-matrix",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,6 +10,7 @@
     "deploy": "wrangler deploy"
   },
   "dependencies": {
+    "@matrix-org/matrix-sdk-crypto-wasm": "^18.0.0",
     "matrix-js-sdk": "^41.3.0"
   },
   "devDependencies": {
