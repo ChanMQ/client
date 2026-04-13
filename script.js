@@ -4,11 +4,9 @@ import { decodeRecoveryKey } from "matrix-js-sdk/lib/crypto-api";
 
 const APP_NAME = "Ficus Matrix App";
 const STORAGE_KEYS = {
-    session: "ficus_matrix_app_session_v4",
-    settings: "ficus_matrix_app_settings_v4",
-    ui: "ficus_matrix_app_ui_v4",
-    drafts: "ficus_matrix_app_drafts_v1",
-    homeservers: "ficus_matrix_app_homeservers_v1",
+    session: "ficus_matrix_app_session_v3",
+    settings: "ficus_matrix_app_settings_v3",
+    ui: "ficus_matrix_app_ui_v3",
 };
 const SESSION_SECRET_STORAGE_KEY = "ficus_matrix_app_secret_storage_key";
 
@@ -17,11 +15,6 @@ const DEFAULT_SETTINGS = {
     sendReadReceipts: true,
     sendTyping: true,
     compactMode: false,
-    showMutedRooms: true,
-    showAvatars: true,
-    use24HourTime: true,
-    confirmLeaveRoom: false,
-    preserveDrafts: true,
 };
 
 const DEFAULT_UI = {
@@ -30,7 +23,6 @@ const DEFAULT_UI = {
     blockedUsers: [],
     activeTab: "chats",
     lastRoomId: null,
-    chatFolder: "all",
 };
 
 const state = {
@@ -38,8 +30,6 @@ const state = {
     session: null,
     settings: loadJson(STORAGE_KEYS.settings, DEFAULT_SETTINGS),
     ui: loadJson(STORAGE_KEYS.ui, DEFAULT_UI),
-    drafts: loadJson(STORAGE_KEYS.drafts, {}),
-    recentHomeservers: loadJson(STORAGE_KEYS.homeservers, []),
     authMode: "login",
     syncState: "STOPPED",
     cryptoReady: false,
@@ -51,8 +41,6 @@ const state = {
         keyBackupTrusted: false,
         lastError: "",
     },
-    authServerMeta: null,
-    authUsernameStatus: null,
     activeRoomId: null,
     activeMessageEvent: null,
     activeRoomContextId: null,
@@ -75,19 +63,11 @@ const refs = {
     authHomeserver: document.getElementById("authHomeserver"),
     authUsername: document.getElementById("authUsername"),
     authPassword: document.getElementById("authPassword"),
-    authPasswordConfirm: document.getElementById("authPasswordConfirm"),
-    authPasswordConfirmField: document.getElementById("authPasswordConfirmField"),
     authDisplayName: document.getElementById("authDisplayName"),
     authDisplayNameField: document.getElementById("authDisplayNameField"),
-    authDeviceName: document.getElementById("authDeviceName"),
     authEnableCrypto: document.getElementById("authEnableCrypto"),
     authError: document.getElementById("authError"),
     authSubmit: document.getElementById("authSubmit"),
-    checkServerBtn: document.getElementById("checkServerBtn"),
-    checkUsernameBtn: document.getElementById("checkUsernameBtn"),
-    authServerMeta: document.getElementById("authServerMeta"),
-    authServerHistory: document.getElementById("authServerHistory"),
-    authUsernameHint: document.getElementById("authUsernameHint"),
 
     appShell: document.getElementById("appShell"),
     navItems: Array.from(document.querySelectorAll(".nav-item")),
@@ -102,7 +82,6 @@ const refs = {
     composeMenuBtn: document.getElementById("composeMenuBtn"),
     publicSearchInput: document.getElementById("publicSearchInput"),
     publicSearchBtn: document.getElementById("publicSearchBtn"),
-    chatFolderChips: document.getElementById("chatFolderChips"),
 
     chatPinnedSection: document.getElementById("chatPinnedSection"),
     chatDmSection: document.getElementById("chatDmSection"),
@@ -125,17 +104,9 @@ const refs = {
     restoreKeysBtn: document.getElementById("restoreKeysBtn"),
     checkBackupBtn: document.getElementById("checkBackupBtn"),
     logoutBtn: document.getElementById("logoutBtn"),
-    reconnectBtn: document.getElementById("reconnectBtn"),
-    copySessionBtn: document.getElementById("copySessionBtn"),
-    clearDraftsBtn: document.getElementById("clearDraftsBtn"),
-    resetUiBtn: document.getElementById("resetUiBtn"),
     settingReadReceipts: document.getElementById("settingReadReceipts"),
     settingTyping: document.getElementById("settingTyping"),
     settingCompactMode: document.getElementById("settingCompactMode"),
-    settingShowMutedRooms: document.getElementById("settingShowMutedRooms"),
-    settingShowAvatars: document.getElementById("settingShowAvatars"),
-    settingUse24HourTime: document.getElementById("settingUse24HourTime"),
-    settingConfirmLeaveRoom: document.getElementById("settingConfirmLeaveRoom"),
 
     emptyState: document.getElementById("emptyState"),
     chatView: document.getElementById("chatView"),
@@ -154,8 +125,8 @@ const refs = {
     composerContext: document.getElementById("composerContext"),
     messageContainer: document.getElementById("messageContainer"),
     typingBar: document.getElementById("typingBar"),
-    attachmentInput: document.getElementById("attachmentInput"),
     attachBtn: document.getElementById("attachBtn"),
+    attachmentInput: document.getElementById("attachmentInput"),
     chatInput: document.getElementById("chatInput"),
     sendBtn: document.getElementById("sendBtn"),
 
@@ -187,8 +158,6 @@ async function init() {
     bindStaticEvents();
     applyLocalSettings();
     syncSettingsUI();
-    renderRecentHomeservers();
-    renderChatFolderChips();
     updateAuthMode(state.authMode);
     switchTab(state.ui.activeTab || "chats");
 
@@ -214,27 +183,9 @@ function bindStaticEvents() {
     });
 
     refs.authForm.addEventListener("submit", handleAuthSubmit);
-    refs.checkServerBtn.addEventListener("click", () => verifyHomeserver(refs.authHomeserver.value.trim(), { showToast: true }));
-    refs.checkUsernameBtn.addEventListener("click", () => checkUsernameAvailability(true));
-    refs.authHomeserver.addEventListener("change", () => {
-        refs.authUsernameHint.classList.add("hidden");
-        verifyHomeserver(refs.authHomeserver.value.trim()).catch(() => {});
-    });
-    refs.authUsername.addEventListener("blur", () => {
-        if (state.authMode === "register") checkUsernameAvailability(false).catch(() => {});
-    });
 
     refs.navItems.forEach((item) => {
         item.addEventListener("click", () => switchTab(item.dataset.tab || "chats"));
-    });
-
-    refs.chatFolderChips.addEventListener("click", (event) => {
-        const chip = event.target.closest("[data-folder]");
-        if (!chip) return;
-        state.ui.chatFolder = chip.dataset.folder || "all";
-        saveJson(STORAGE_KEYS.ui, state.ui);
-        renderChatFolderChips();
-        renderRooms();
     });
 
     refs.roomSearchInput.addEventListener("input", renderRooms);
@@ -308,18 +259,16 @@ function bindStaticEvents() {
     refs.restoreKeysBtn.addEventListener("click", openRestoreKeysModal);
     refs.checkBackupBtn.addEventListener("click", recheckCryptoAndBackup);
     refs.logoutBtn.addEventListener("click", logout);
-    refs.reconnectBtn.addEventListener("click", reconnectNow);
-    refs.copySessionBtn.addEventListener("click", copySessionInfo);
-    refs.clearDraftsBtn.addEventListener("click", clearAllDrafts);
-    refs.resetUiBtn.addEventListener("click", resetLocalUi);
 
-    refs.settingReadReceipts.addEventListener("change", () => setSettings({ sendReadReceipts: refs.settingReadReceipts.checked }));
-    refs.settingTyping.addEventListener("change", () => setSettings({ sendTyping: refs.settingTyping.checked }));
-    refs.settingCompactMode.addEventListener("change", () => setSettings({ compactMode: refs.settingCompactMode.checked }));
-    refs.settingShowMutedRooms.addEventListener("change", () => setSettings({ showMutedRooms: refs.settingShowMutedRooms.checked }));
-    refs.settingShowAvatars.addEventListener("change", () => setSettings({ showAvatars: refs.settingShowAvatars.checked }));
-    refs.settingUse24HourTime.addEventListener("change", () => setSettings({ use24HourTime: refs.settingUse24HourTime.checked }));
-    refs.settingConfirmLeaveRoom.addEventListener("change", () => setSettings({ confirmLeaveRoom: refs.settingConfirmLeaveRoom.checked }));
+    refs.settingReadReceipts.addEventListener("change", () => {
+        setSettings({ sendReadReceipts: refs.settingReadReceipts.checked });
+    });
+    refs.settingTyping.addEventListener("change", () => {
+        setSettings({ sendTyping: refs.settingTyping.checked });
+    });
+    refs.settingCompactMode.addEventListener("change", () => {
+        setSettings({ compactMode: refs.settingCompactMode.checked });
+    });
 
     refs.modalBody.addEventListener("click", handleModalActions);
     refs.modalBody.addEventListener("change", handleModalChanges);
@@ -333,13 +282,9 @@ function updateAuthMode(mode) {
     state.authMode = mode;
     refs.authTabs.forEach((button) => button.classList.toggle("active", button.dataset.authMode === mode));
     refs.authDisplayNameField.classList.toggle("hidden", mode !== "register");
-    refs.authPasswordConfirmField.classList.toggle("hidden", mode !== "register");
-    refs.checkUsernameBtn.classList.toggle("hidden", mode !== "register");
     refs.authSubmit.textContent = mode === "register" ? "Создать аккаунт" : "Войти";
     refs.authPassword.autocomplete = mode === "register" ? "new-password" : "current-password";
-    refs.authPasswordConfirm.autocomplete = mode === "register" ? "new-password" : "off";
     refs.authError.classList.add("hidden");
-    refs.authUsernameHint.classList.add("hidden");
 }
 
 function showAuth() {
@@ -360,31 +305,36 @@ async function handleAuthSubmit(event) {
     const baseUrl = normalizeHomeserver(refs.authHomeserver.value.trim());
     const usernameRaw = refs.authUsername.value.trim();
     const password = refs.authPassword.value;
-    const passwordConfirm = refs.authPasswordConfirm.value;
     const displayName = refs.authDisplayName.value.trim();
-    const deviceName = refs.authDeviceName.value.trim() || APP_NAME;
     const enableCrypto = refs.authEnableCrypto.checked;
 
     try {
         if (!baseUrl) throw new Error("Укажи валидный homeserver URL.");
         if (!usernameRaw) throw new Error("Укажи логин или Matrix ID.");
         if (!password) throw new Error("Укажи пароль.");
-        if (state.authMode === "register") {
-            if (password.length < 8) throw new Error("Для регистрации задай пароль не короче 8 символов.");
-            if (password !== passwordConfirm) throw new Error("Пароли не совпадают.");
-        }
 
-        await verifyHomeserver(baseUrl);
         const tempClient = sdk.createClient({ baseUrl });
         let response;
 
         if (state.authMode === "register") {
             const localpart = usernameToLocalpart(usernameRaw);
-            const availability = await checkUsernameAvailability(false, tempClient, localpart);
-            if (availability === false) throw new Error("Этот логин уже занят на данном homeserver.");
-            response = await performRegistration(tempClient, { localpart, password, deviceName });
+            response = await tempClient.registerRequest({
+                username: localpart,
+                password,
+                initial_device_display_name: APP_NAME,
+                inhibit_login: false,
+                refresh_token: true,
+            });
         } else {
-            response = await performLogin(tempClient, { usernameRaw, password, deviceName });
+            const identifierUser = usernameRaw.startsWith("@") ? usernameRaw : usernameToLocalpart(usernameRaw);
+            response = await tempClient.loginRequest({
+                type: "m.login.password",
+                identifier: { type: "m.id.user", user: identifierUser },
+                user: identifierUser,
+                password,
+                initial_device_display_name: APP_NAME,
+                refresh_token: true,
+            });
         }
 
         const session = {
@@ -396,7 +346,6 @@ async function handleAuthSubmit(event) {
             enableCrypto,
         };
 
-        rememberHomeserver(baseUrl);
         saveJson(STORAGE_KEYS.session, session);
         await startSession(session);
 
@@ -414,188 +363,6 @@ async function handleAuthSubmit(event) {
     }
 }
 
-
-async function performLogin(tempClient, { usernameRaw, password, deviceName }) {
-    const identifierUser = usernameRaw.startsWith("@") ? usernameRaw : usernameToLocalpart(usernameRaw);
-    try {
-        return await tempClient.loginRequest({
-            type: "m.login.password",
-            identifier: { type: "m.id.user", user: identifierUser },
-            user: identifierUser,
-            password,
-            initial_device_display_name: deviceName,
-            refresh_token: true,
-        });
-    } catch (error) {
-        if (/refresh/i.test(parseError(error))) {
-            return tempClient.loginRequest({
-                type: "m.login.password",
-                identifier: { type: "m.id.user", user: identifierUser },
-                user: identifierUser,
-                password,
-                initial_device_display_name: deviceName,
-            });
-        }
-        throw error;
-    }
-}
-
-async function performRegistration(tempClient, { localpart, password, deviceName }) {
-    try {
-        return await tempClient.registerRequest({
-            username: localpart,
-            password,
-            initial_device_display_name: deviceName,
-            inhibit_login: false,
-            refresh_token: true,
-            auth: { type: "m.login.dummy" },
-        });
-    } catch (error) {
-        const flows = extractRegistrationFlows(error);
-        if (flows.length) {
-            const stages = [...new Set(flows.flatMap((flow) => flow.stages || []))];
-            const unsupported = stages.filter((stage) => stage !== "m.login.dummy");
-            if (unsupported.length) {
-                throw new Error(`Этот homeserver требует дополнительный registration flow: ${unsupported.join(", ")}. В чистом browser-клиенте это нельзя завершить автоматически.`);
-            }
-        }
-        if (/refresh/i.test(parseError(error))) {
-            return tempClient.registerRequest({
-                username: localpart,
-                password,
-                initial_device_display_name: deviceName,
-                inhibit_login: false,
-                auth: { type: "m.login.dummy" },
-            });
-        }
-        if (error?.errcode === "M_USER_IN_USE") throw new Error("Этот логин уже занят.");
-        throw error;
-    }
-}
-
-function extractRegistrationFlows(error) {
-    return error?.data?.flows || error?.flows || error?.body?.flows || [];
-}
-
-async function verifyHomeserver(value, { showToast = false } = {}) {
-    const baseUrl = normalizeHomeserver(value);
-    if (!baseUrl) {
-        refs.authServerMeta.classList.add("hidden");
-        state.authServerMeta = null;
-        return null;
-    }
-
-    const tempClient = sdk.createClient({ baseUrl });
-    const meta = { baseUrl, ok: false, versions: [], loginFlows: [], registerProbe: "unknown", error: "" };
-
-    try {
-        const [versions, loginFlows] = await Promise.all([
-            tempClient.getVersions?.().catch(() => null),
-            tempClient.loginFlows?.().catch(() => null),
-        ]);
-        meta.ok = true;
-        meta.versions = versions?.versions || [];
-        meta.loginFlows = (loginFlows?.flows || []).map((flow) => flow.type);
-        try {
-            const probe = await fetch(`${baseUrl}/_matrix/client/v3/register/available?username=ficusprobe${Date.now()}`);
-            meta.registerProbe = probe.ok || [400, 401, 403].includes(probe.status) ? "reachable" : `http ${probe.status}`;
-        } catch {
-            meta.registerProbe = "unavailable";
-        }
-        state.authServerMeta = meta;
-        renderAuthServerMeta();
-        if (showToast) showStatus(`Homeserver доступен: ${baseUrl}`);
-        return meta;
-    } catch (error) {
-        meta.error = parseError(error);
-        state.authServerMeta = meta;
-        renderAuthServerMeta();
-        if (showToast) showStatus(`Homeserver недоступен: ${meta.error}`, "error", true);
-        throw error;
-    }
-}
-
-function renderAuthServerMeta() {
-    const meta = state.authServerMeta;
-    if (!meta) {
-        refs.authServerMeta.classList.add("hidden");
-        refs.authServerMeta.innerHTML = "";
-        return;
-    }
-    refs.authServerMeta.classList.remove("hidden");
-    if (!meta.ok) {
-        refs.authServerMeta.innerHTML = `<div><strong>Сервер не ответил.</strong> ${escapeHtml(meta.error || "Проверь URL и CORS на homeserver.")}</div>`;
-        return;
-    }
-    refs.authServerMeta.innerHTML = `
-        <div><strong>Homeserver:</strong> ${escapeHtml(meta.baseUrl)}</div>
-        <div><strong>Login flows:</strong> ${escapeHtml(meta.loginFlows.length ? meta.loginFlows.join(", ") : "не удалось определить")}</div>
-        <div><strong>Registration probe:</strong> ${escapeHtml(meta.registerProbe)}</div>
-        <div><strong>Versions:</strong> ${escapeHtml(meta.versions.slice(-3).join(", ") || "—")}</div>
-    `;
-}
-
-async function checkUsernameAvailability(showToast = false, clientOverride = null, localpartOverride = null) {
-    if (state.authMode !== "register" && !clientOverride) return null;
-    const baseUrl = normalizeHomeserver(refs.authHomeserver.value.trim());
-    const localpart = localpartOverride || usernameToLocalpart(refs.authUsername.value.trim());
-    if (!baseUrl || !localpart) {
-        refs.authUsernameHint.classList.add("hidden");
-        return null;
-    }
-
-    const tempClient = clientOverride || sdk.createClient({ baseUrl });
-    try {
-        const available = await tempClient.isUsernameAvailable(localpart);
-        state.authUsernameStatus = available;
-        refs.authUsernameHint.className = `auth-inline-help ${available ? "ok" : "error"}`;
-        refs.authUsernameHint.textContent = available ? `Логин ${localpart} свободен на этом homeserver.` : `Логин ${localpart} уже занят.`;
-        refs.authUsernameHint.classList.remove("hidden");
-        if (showToast) showStatus(refs.authUsernameHint.textContent, available ? "info" : "error", !available);
-        return available;
-    } catch (error) {
-        refs.authUsernameHint.className = "auth-inline-help";
-        refs.authUsernameHint.textContent = `Проверка логина недоступна: ${parseError(error)}`;
-        refs.authUsernameHint.classList.remove("hidden");
-        if (showToast) showStatus(refs.authUsernameHint.textContent, "error", true);
-        return null;
-    }
-}
-
-function rememberHomeserver(baseUrl) {
-    if (!baseUrl) return;
-    state.recentHomeservers = [baseUrl, ...state.recentHomeservers.filter((item) => item !== baseUrl)].slice(0, 6);
-    saveJson(STORAGE_KEYS.homeservers, state.recentHomeservers);
-    renderRecentHomeservers();
-}
-
-function renderRecentHomeservers() {
-    refs.authServerHistory.innerHTML = "";
-    if (!state.recentHomeservers.length) {
-        refs.authServerHistory.classList.add("hidden");
-        return;
-    }
-    refs.authServerHistory.classList.remove("hidden");
-    state.recentHomeservers.forEach((server) => {
-        const button = document.createElement("button");
-        button.className = `server-chip${refs.authHomeserver.value.trim() === server ? " active" : ""}`;
-        button.type = "button";
-        button.textContent = server.replace(/^https?:\/\//, "");
-        button.addEventListener("click", () => {
-            refs.authHomeserver.value = server;
-            renderRecentHomeservers();
-            verifyHomeserver(server, { showToast: true }).catch(() => {});
-        });
-        refs.authServerHistory.appendChild(button);
-    });
-}
-
-function renderChatFolderChips() {
-    refs.chatFolderChips.querySelectorAll("[data-folder]").forEach((chip) => {
-        chip.classList.toggle("active", chip.dataset.folder === (state.ui.chatFolder || "all"));
-    });
-}
-
 async function startSession(session, options = {}) {
     teardownClient();
     refs.body.classList.remove("mobile-chat-active");
@@ -604,7 +371,6 @@ async function startSession(session, options = {}) {
     refs.messageContainer.innerHTML = "";
 
     state.session = session;
-    rememberHomeserver(session.baseUrl);
     state.activeRoomId = state.ui.lastRoomId || null;
     state.replyToEventId = null;
     state.editEventId = null;
@@ -818,39 +584,26 @@ function setSettings(next) {
     saveJson(STORAGE_KEYS.settings, state.settings);
     applyLocalSettings();
     syncSettingsUI();
-    renderRooms();
-    renderSettings();
 }
 
 function applyLocalSettings() {
     refs.body.classList.toggle("compact-mode", Boolean(state.settings.compactMode));
-    refs.body.classList.toggle("hide-list-avatars", !Boolean(state.settings.showAvatars));
 }
 
 function syncSettingsUI() {
     refs.settingReadReceipts.checked = Boolean(state.settings.sendReadReceipts);
     refs.settingTyping.checked = Boolean(state.settings.sendTyping);
     refs.settingCompactMode.checked = Boolean(state.settings.compactMode);
-    refs.settingShowMutedRooms.checked = Boolean(state.settings.showMutedRooms);
-    refs.settingShowAvatars.checked = Boolean(state.settings.showAvatars);
-    refs.settingUse24HourTime.checked = Boolean(state.settings.use24HourTime);
-    refs.settingConfirmLeaveRoom.checked = Boolean(state.settings.confirmLeaveRoom);
     refs.authEnableCrypto.checked = Boolean(state.settings.enableCrypto);
 }
 
 function renderSettings() {
     const me = state.session?.userId || "—";
-    const currentUser = state.client?.getUser?.(me);
     refs.settingsProfileCard.innerHTML = `
-        <div class="profile-avatar">${escapeHtml(initialsFromName(currentUser?.displayName || me))}</div>
+        <div class="profile-avatar">${escapeHtml(initialsFromName(me))}</div>
         <div class="profile-copy">
-            <div class="profile-name">${escapeHtml(currentUser?.displayName || me)}</div>
+            <div class="profile-name">${escapeHtml(state.client?.getUser?.(me)?.displayName || me)}</div>
             <div class="profile-id">${escapeHtml(me)}</div>
-            <div class="profile-meta-row">
-                <span class="state-pill">${escapeHtml(state.syncState || "STOPPED")}</span>
-                ${state.cryptoStatus.enabled ? `<span class="state-pill">Crypto</span>` : ""}
-                ${(state.ui.pinnedRooms || []).length ? `<span class="state-pill">Pinned ${state.ui.pinnedRooms.length}</span>` : ""}
-            </div>
         </div>
     `;
 
@@ -865,7 +618,7 @@ function renderSettings() {
     }
 
     refs.cryptoStatusValue.textContent = state.cryptoStatus.enabled
-        ? `Активно${state.cryptoReady ? " / rust" : ""}${state.cryptoStatus.secretStorageReady ? " / 4S" : ""}`
+        ? `Активно${state.cryptoReady ? " / rust" : ""}`
         : (state.cryptoStatus.lastError || "Выключено");
 
     const backupParts = [];
@@ -878,8 +631,7 @@ function renderSettings() {
 function renderRooms() {
     const rooms = getJoinedRoomsSorted();
     const query = refs.roomSearchInput.value.trim().toLowerCase();
-    const filteredBase = rooms.filter((room) => matchesRoomQuery(room, query));
-    const filtered = applyChatFolderFilter(filteredBase);
+    const filtered = rooms.filter((room) => matchesRoomQuery(room, query));
 
     const pinnedIds = new Set(state.ui.pinnedRooms || []);
     const pinned = filtered.filter((room) => pinnedIds.has(room.roomId));
@@ -902,17 +654,6 @@ function renderRooms() {
     renderPublicDirectory();
 }
 
-function applyChatFolderFilter(rooms) {
-    const folder = state.ui.chatFolder || "all";
-    switch (folder) {
-        case "unread": return rooms.filter((room) => getUnreadCount(room) > 0);
-        case "dm": return rooms.filter(isDirectRoom);
-        case "groups": return rooms.filter((room) => !isDirectRoom(room));
-        case "encrypted": return rooms.filter(isEncryptedRoom);
-        default: return rooms;
-    }
-}
-
 function fillRoomSection(node, rooms, title = "") {
     node.innerHTML = "";
     if (!rooms.length) return;
@@ -931,8 +672,7 @@ function fillRoomSection(node, rooms, title = "") {
 
 function renderRoomItem(room) {
     const item = document.createElement("button");
-    const draft = state.settings.preserveDrafts ? (state.drafts[room.roomId] || "") : "";
-    item.className = `room-item${room.roomId === state.activeRoomId ? " active" : ""}${draft ? " has-draft" : ""}`;
+    item.className = `room-item${room.roomId === state.activeRoomId ? " active" : ""}`;
     item.dataset.roomId = room.roomId;
     item.type = "button";
 
@@ -941,18 +681,16 @@ function renderRoomItem(room) {
     const badges = [];
     if (isEncryptedRoom(room)) badges.push(`<span class="state-pill">E2EE</span>`);
     if ((state.ui.mutedRooms || []).includes(room.roomId)) badges.push(`<span class="state-pill is-muted">Muted</span>`);
-    if (draft) badges.push(`<span class="state-pill">Draft</span>`);
     if (unread > 0) badges.push(`<span class="unread-badge">${Math.min(unread, 99)}</span>`);
 
-    const preview = draft || getPreviewText(lastEvent, room);
     item.innerHTML = `
-        <div class="room-avatar${(state.ui.mutedRooms || []).includes(room.roomId) ? " is-muted" : ""}">${escapeHtml(initialsFromName(getRoomName(room)))}</div>
+        <div class="room-avatar">${escapeHtml(initialsFromName(getRoomName(room)))}</div>
         <div class="room-main">
             <div class="room-top">
                 <div class="room-name">${escapeHtml(getRoomName(room))}</div>
                 <div class="room-time">${escapeHtml(formatTime(getRoomSortTimestamp(room) || Date.now()))}</div>
             </div>
-            <div class="room-preview${preview.length > 64 ? " multiline" : ""}">${escapeHtml(preview)}</div>
+            <div class="room-preview">${escapeHtml(getPreviewText(lastEvent, room))}</div>
             <div class="room-meta-row">${badges.join("")}</div>
         </div>
     `;
@@ -1011,10 +749,6 @@ function openRoom(roomId) {
     state.messageSearchResults = [];
     refs.messageSearchResults.classList.add("hidden");
     refs.messageSearchResults.innerHTML = "";
-    if (state.settings.preserveDrafts && !state.replyToEventId && !state.editEventId) {
-        refs.chatInput.value = state.drafts[roomId] || "";
-        refs.chatInput.dispatchEvent(new Event("input"));
-    }
     renderRooms();
     renderChat();
     maybeAutoScroll(true);
@@ -1072,7 +806,8 @@ function renderChat() {
 
 function renderMessageEvent(event, room, { isMine, shouldShowAuthor }) {
     const row = document.createElement("div");
-    row.className = `msg-row${isMine ? " mine" : ""}`;
+    const isContinuation = !shouldShowAuthor;
+    row.className = `msg-row${isMine ? " mine" : ""}${isContinuation ? " continuation" : ""}`;
     row.dataset.eventId = event.getId?.() || "";
     row.dataset.roomId = room.roomId;
 
@@ -1084,8 +819,8 @@ function renderMessageEvent(event, room, { isMine, shouldShowAuthor }) {
     const bodyHtml = buildMessageContentHtml(event);
 
     row.innerHTML = `
-        <div class="member-avatar">${escapeHtml(initialsFromName(senderName))}</div>
-        <div class="msg-bubble">
+        <div class="member-avatar${isContinuation && !isMine ? " spacer" : ""}">${escapeHtml(initialsFromName(senderName))}</div>
+        <div class="msg-bubble${replyEventId ? " has-reply" : ""}">
             ${shouldShowAuthor ? `<div class="msg-author">${escapeHtml(senderName)}</div>` : ""}
             ${replyHtml}
             ${bodyHtml}
@@ -1196,17 +931,10 @@ function renderTypingBar() {
 function buildRoomStatus(room) {
     const members = room.getJoinedMembers?.() || [];
     const parts = [];
-    if (isDirectRoom(room)) {
-        const other = members.find((member) => member.userId !== state.session?.userId);
-        if (other?.presence === "online") parts.push("в сети");
-    } else {
-        parts.push(`${members.length || 0} участников`);
-    }
+    parts.push(`${members.length || 0} участников`);
     const topic = getRoomTopic(room);
     if (topic) parts.push(topic);
-    const unread = getUnreadCount(room);
-    if (unread) parts.push(`${unread} unread`);
-    return parts.join(" · ") || "Без статуса";
+    return parts.join(" · ");
 }
 
 function buildComposerContextHtml(room) {
@@ -1246,7 +974,6 @@ function handleComposerKeydown(event) {
 function handleComposerInput(event) {
     event.currentTarget.style.height = "auto";
     event.currentTarget.style.height = `${Math.min(event.currentTarget.scrollHeight, 140)}px`;
-    persistDraftForActiveRoom(event.currentTarget.value);
     if (state.settings.sendTyping) sendTyping();
 }
 
@@ -1258,26 +985,32 @@ async function sendCurrentMessage() {
     const text = refs.chatInput.value.trim();
     if (!text) return;
 
-    const content = { msgtype: "m.text", body: text };
+    const content = {
+        msgtype: "m.text",
+        body: text,
+    };
 
     if (state.replyToEventId) {
-        content["m.relates_to"] = { "m.in_reply_to": { event_id: state.replyToEventId } };
+        content["m.relates_to"] = {
+            "m.in_reply_to": { event_id: state.replyToEventId },
+        };
     }
 
     if (state.editEventId) {
         content.body = `* ${text}`;
         content["m.new_content"] = { msgtype: "m.text", body: text };
-        content["m.relates_to"] = { rel_type: "m.replace", event_id: state.editEventId };
+        content["m.relates_to"] = {
+            rel_type: "m.replace",
+            event_id: state.editEventId,
+        };
     }
 
     try {
         await client.sendEvent(room.roomId, "m.room.message", content, "");
         refs.chatInput.value = "";
         refs.chatInput.style.height = "auto";
-        clearDraftForRoom(room.roomId);
         clearComposeContext();
         renderChat();
-        renderRooms();
         maybeAutoScroll(true);
     } catch (error) {
         showStatus(`Сообщение не отправилось: ${parseError(error)}`, "error", true);
@@ -1473,7 +1206,6 @@ async function handleRoomMenu(event) {
     if (action === "info") return openRoomInfo(roomId);
     if (action === "invite") return openInviteModal(roomId);
     if (action === "leave") {
-        if (state.settings.confirmLeaveRoom && !window.confirm(`Покинуть ${getRoomName(room)}?`)) return;
         try {
             await state.client.leave(roomId);
             if (state.activeRoomId === roomId) {
@@ -1545,64 +1277,6 @@ async function handleMessageMenu(event) {
     }
 }
 
-function persistDraftForActiveRoom(value) {
-    if (!state.settings.preserveDrafts || !state.activeRoomId || state.editEventId) return;
-    const cleaned = String(value || "");
-    if (!cleaned.trim()) {
-        clearDraftForRoom(state.activeRoomId, false);
-        return;
-    }
-    state.drafts[state.activeRoomId] = cleaned;
-    saveJson(STORAGE_KEYS.drafts, state.drafts);
-    renderRooms();
-}
-
-function clearDraftForRoom(roomId, rerender = true) {
-    if (!roomId || !state.drafts[roomId]) return;
-    delete state.drafts[roomId];
-    saveJson(STORAGE_KEYS.drafts, state.drafts);
-    if (rerender) renderRooms();
-}
-
-function clearAllDrafts() {
-    state.drafts = {};
-    saveJson(STORAGE_KEYS.drafts, state.drafts);
-    if (state.activeRoomId) refs.chatInput.value = "";
-    refs.chatInput.style.height = "auto";
-    renderRooms();
-    showStatus("Черновики очищены.");
-}
-
-function reconnectNow() {
-    if (!state.client) return;
-    const retried = state.client.retryImmediately?.();
-    if (!retried && state.session) {
-        startSession(state.session, { restoring: true }).catch((error) => showStatus(`Переподключение не удалось: ${parseError(error)}`, "error", true));
-        return;
-    }
-    showStatus("Повтор sync запущен.");
-}
-
-async function copySessionInfo() {
-    const payload = [
-        `Homeserver: ${state.session?.baseUrl || "—"}`,
-        `MXID: ${state.session?.userId || "—"}`,
-        `Device ID: ${state.session?.deviceId || "—"}`,
-        `Sync: ${state.syncState || "STOPPED"}`,
-    ].join("\n");
-    await navigator.clipboard.writeText(payload);
-    showStatus("Данные сессии скопированы.");
-}
-
-function resetLocalUi() {
-    state.ui = structuredClone(DEFAULT_UI);
-    saveJson(STORAGE_KEYS.ui, state.ui);
-    renderChatFolderChips();
-    switchTab(state.ui.activeTab || "chats");
-    renderRooms();
-    showStatus("Локальные пины, mute и фильтры сброшены.");
-}
-
 function clearComposeContext() {
     state.replyToEventId = null;
     state.editEventId = null;
@@ -1626,6 +1300,23 @@ function closeMenus() {
     refs.composeMenu.classList.remove("active");
     refs.roomMenu.classList.remove("active");
     refs.messageMenu.classList.remove("active");
+}
+
+function getRoomAvatarMxc(room) {
+    return room?.currentState?.getStateEvents?.("m.room.avatar", "")?.getContent?.()?.url
+        || room?.currentState?.getStateEvents?.("im.vector.modular.widgets", "")?.getContent?.()?.avatar_url
+        || "";
+}
+
+async function buildAvatarMarkup(label, mxcUrl = "", className = "modal-hero-avatar") {
+    const initials = escapeHtml(initialsFromName(label || "?"));
+    if (state.settings.showAvatars && mxcUrl) {
+        const src = await getMediaSrc(mxcUrl).catch(() => "");
+        if (src && src !== "#") {
+            return `<div class="${className} avatar-photo"><img src="${escapeHtml(src)}" alt="${escapeHtml(label || "avatar")}"></div>`;
+        }
+    }
+    return `<div class="${className}">${initials}</div>`;
 }
 
 function openModal(title, subtitle = "", html = "") {
@@ -1719,20 +1410,35 @@ function openEditProfileModal() {
     const currentUser = state.client?.getUser?.(me);
     openModal(
         "Редактирование профиля",
-        "Изменение display name и avatar через Matrix API",
+        "Аккуратный профиль без фальшивых настроек: только реальные Matrix-поля и avatar upload.",
         `
-            <form class="fieldset" data-modal-form="edit-profile">
+            <div class="modal-hero compact-hero">
+                <div class="modal-hero-avatar">${escapeHtml(initialsFromName(currentUser?.displayName || me))}</div>
+                <div class="modal-hero-copy">
+                    <div class="modal-kicker">Ваш профиль</div>
+                    <div class="modal-hero-title">${escapeHtml(currentUser?.displayName || me)}</div>
+                    <div class="modal-hero-subtitle">${escapeHtml(me)}</div>
+                    <div class="hero-badge-row">
+                        <span class="state-pill">Display name</span>
+                        <span class="state-pill">Avatar upload</span>
+                    </div>
+                </div>
+            </div>
+            <form class="fieldset polished-form" data-modal-form="edit-profile">
+                <div class="section-caption">Параметры профиля</div>
                 <label class="field">
                     <span>Display name</span>
                     <input name="displayName" type="text" value="${escapeHtml(currentUser?.displayName || "")}" placeholder="Ваш display name">
+                    <small>Изменится в Matrix-профиле и будет виден другим клиентам.</small>
                 </label>
                 <label class="field">
                     <span>Avatar</span>
                     <input name="avatarFile" type="file" accept="image/*">
+                    <small>Поддерживается стандартный upload через Matrix media API.</small>
                 </label>
-                <div class="form-actions">
+                <div class="form-actions sticky-actions">
                     <button class="secondary-btn" type="button" data-inline-action="close-modal">Отмена</button>
-                    <button class="primary-btn" type="submit">Сохранить</button>
+                    <button class="primary-btn" type="submit">Сохранить профиль</button>
                 </div>
             </form>
         `,
@@ -1742,59 +1448,64 @@ function openEditProfileModal() {
 function openRestoreKeysModal() {
     openModal(
         "Восстановление encrypted history",
-        "Для старых зашифрованных сообщений этому устройству нужен рабочий key backup: через secret storage, recovery key или passphrase.",
+        "Оформили сценарий как взрослый системный экран: без фейкового security, только реальные варианты восстановления ключей.",
         `
-            <div class="room-info-card">
-                <div class="info-label">Текущее состояние</div>
-                <div class="info-value">${escapeHtml(refs.backupStatusValue.textContent || "—")}</div>
+            <div class="modal-hero compact-hero modal-hero-security">
+                <div class="modal-hero-avatar">K</div>
+                <div class="modal-hero-copy">
+                    <div class="modal-kicker">Key backup</div>
+                    <div class="modal-hero-title">Восстановление ключей</div>
+                    <div class="modal-hero-subtitle">${escapeHtml(refs.backupStatusValue.textContent || "—")}</div>
+                    <div class="hero-badge-row">
+                        <span class="state-pill">Secret storage</span>
+                        <span class="state-pill">Recovery key</span>
+                        <span class="state-pill">Passphrase</span>
+                    </div>
+                </div>
             </div>
 
-            <form class="fieldset" data-modal-form="restore-keys-from-secret-storage">
-                <div class="room-info-card">
-                    <div class="info-label">1. Secret storage / already cached key</div>
-                    <div class="info-value">Если recovery key уже был передан этому браузеру, клиент попробует загрузить backup key из secret storage и после этого сможет автоматически подтягивать missing keys.</div>
+            <form class="fieldset polished-form" data-modal-form="restore-keys-from-secret-storage">
+                <div class="section-caption">1. Уже сохранённый ключ</div>
+                <div class="room-info-card tone-card">
+                    <div class="info-value">Если recovery key уже был передан этому браузеру, клиент попробует загрузить backup key из secret storage и включить доступ к старым encrypted messages.</div>
                 </div>
-                <label class="toggle-row compact">
+                <label class="toggle-row compact emphasized-toggle">
                     <input name="fullRestore" type="checkbox" checked>
                     <span>Сразу запустить полное restore key backup</span>
                 </label>
-                <div class="form-actions">
+                <div class="form-actions sticky-actions single-action">
                     <button class="primary-btn" type="submit">Загрузить из secret storage</button>
                 </div>
             </form>
 
-            <hr class="soft">
-
-            <form class="fieldset" data-modal-form="restore-keys-from-recovery">
-                <div class="room-info-card">
-                    <div class="info-label">2. Recovery key</div>
-                    <div class="info-value">Вставь recovery key из другого Matrix-клиента. Он будет использован как secret storage key для загрузки backup key, после чего можно восстановить старые encrypted messages.</div>
+            <form class="fieldset polished-form" data-modal-form="restore-keys-from-recovery">
+                <div class="section-caption">2. Recovery key</div>
+                <div class="room-info-card tone-card">
+                    <div class="info-value">Предпочтительный путь, если у тебя есть recovery key из другого Matrix-клиента.</div>
                 </div>
                 <label class="field">
                     <span>Recovery key</span>
                     <textarea name="recoveryKey" placeholder="EsTc ..."></textarea>
                 </label>
-                <label class="toggle-row compact">
+                <label class="toggle-row compact emphasized-toggle">
                     <input name="fullRestore" type="checkbox" checked>
                     <span>Сразу запустить полное restore key backup</span>
                 </label>
-                <div class="form-actions">
+                <div class="form-actions sticky-actions single-action">
                     <button class="primary-btn" type="submit">Использовать recovery key</button>
                 </div>
             </form>
 
-            <hr class="soft">
-
-            <form class="fieldset" data-modal-form="restore-keys-from-passphrase">
-                <div class="room-info-card">
-                    <div class="info-label">3. Passphrase</div>
-                    <div class="info-value">Best-effort путь для старых backup-схем. В современных настройках предпочтительнее recovery key / secret storage.</div>
+            <form class="fieldset polished-form" data-modal-form="restore-keys-from-passphrase">
+                <div class="section-caption">3. Passphrase</div>
+                <div class="room-info-card tone-card muted-card">
+                    <div class="info-value">Запасной сценарий для старых backup-схем. Если есть recovery key, лучше использовать его.</div>
                 </div>
                 <label class="field">
                     <span>Passphrase</span>
                     <input name="passphrase" type="password" placeholder="Ваш recovery passphrase">
                 </label>
-                <div class="form-actions">
+                <div class="form-actions sticky-actions single-action">
                     <button class="primary-btn" type="submit">Использовать passphrase</button>
                 </div>
             </form>
@@ -1807,6 +1518,7 @@ async function openRoomInfo(roomId) {
     if (!room) return;
 
     const topic = getRoomTopic(room) || "Без topic";
+    const avatarHtml = await buildAvatarMarkup(getRoomName(room), getRoomAvatarMxc(room), "modal-hero-avatar room-avatar-xl");
     const memberRows = (room.getJoinedMembers?.() || [])
         .slice(0, 60)
         .map((member) => `
@@ -1824,32 +1536,50 @@ async function openRoomInfo(roomId) {
         getRoomName(room),
         room.roomId,
         `
-            <div class="room-info-card">
-                <div class="info-grid">
-                    <div>
-                        <div class="info-label">Тип</div>
-                        <div class="info-value">${isPublicRoom(room) ? "Публичная" : isDirectRoom(room) ? "DM" : "Приватная / групповая"}</div>
+            <div class="modal-hero modal-hero-room">
+                ${avatarHtml}
+                <div class="modal-hero-copy">
+                    <div class="modal-kicker">Room info</div>
+                    <div class="modal-hero-title-row">
+                        <div class="modal-hero-title">${escapeHtml(getRoomName(room))}</div>
+                        ${isEncryptedRoom(room) ? '<span class="encrypted-pill">E2EE</span>' : ''}
                     </div>
-                    <div>
-                        <div class="info-label">Шифрование</div>
-                        <div class="info-value">${isEncryptedRoom(room) ? "Включено" : "Отключено"}</div>
-                    </div>
-                    <div>
-                        <div class="info-label">Участников</div>
-                        <div class="info-value">${room.getJoinedMembers?.().length || 0}</div>
-                    </div>
-                    <div>
-                        <div class="info-label">Unread</div>
-                        <div class="info-value">${getUnreadCount(room)}</div>
+                    <div class="modal-hero-subtitle">${escapeHtml(room.roomId)}</div>
+                    <div class="hero-badge-row">
+                        <span class="state-pill">${isPublicRoom(room) ? "Публичная" : isDirectRoom(room) ? "DM" : "Приватная / групповая"}</span>
+                        <span class="state-pill">${room.getJoinedMembers?.().length || 0} участников</span>
+                        ${getUnreadCount(room) ? `<span class="unread-badge">${Math.min(getUnreadCount(room), 99)}</span>` : ""}
                     </div>
                 </div>
             </div>
-            <div class="room-info-card">
+
+            <div class="detail-grid detail-grid-quad">
+                <div class="detail-card">
+                    <div class="info-label">Тип</div>
+                    <div class="info-value">${isPublicRoom(room) ? "Публичная" : isDirectRoom(room) ? "DM" : "Приватная / групповая"}</div>
+                </div>
+                <div class="detail-card">
+                    <div class="info-label">Шифрование</div>
+                    <div class="info-value">${isEncryptedRoom(room) ? "Включено" : "Отключено"}</div>
+                </div>
+                <div class="detail-card">
+                    <div class="info-label">Участников</div>
+                    <div class="info-value">${room.getJoinedMembers?.().length || 0}</div>
+                </div>
+                <div class="detail-card">
+                    <div class="info-label">Unread</div>
+                    <div class="info-value">${getUnreadCount(room)}</div>
+                </div>
+            </div>
+
+            <div class="room-info-card feature-card">
                 <div class="info-label">Topic</div>
                 <div class="info-value">${escapeHtml(topic)}</div>
             </div>
-            <form class="fieldset" data-modal-form="edit-room">
+
+            <form class="fieldset polished-form" data-modal-form="edit-room">
                 <input type="hidden" name="roomId" value="${escapeHtml(room.roomId)}">
+                <div class="section-caption">Настройки комнаты</div>
                 <label class="field">
                     <span>Название комнаты</span>
                     <input name="name" type="text" value="${escapeHtml(getRoomName(room))}">
@@ -1858,15 +1588,14 @@ async function openRoomInfo(roomId) {
                     <span>Topic</span>
                     <textarea name="topic">${escapeHtml(topic === "Без topic" ? "" : topic)}</textarea>
                 </label>
-                <div class="form-actions">
+                <div class="form-actions sticky-actions">
                     <button class="primary-btn" type="submit">Сохранить room info</button>
                 </div>
             </form>
-            <div class="room-info-card">
-                <div class="info-label">Участники</div>
-                <div class="member-list">${memberRows || '<div class="empty-list">Участники не загружены.</div>'}</div>
-            </div>
-            <div class="inline-actions">
+
+            <div class="section-caption">Участники</div>
+            <div class="member-list member-list-card">${memberRows || '<div class="empty-list">Участники не загружены.</div>'}</div>
+            <div class="inline-actions action-grid">
                 <button class="secondary-btn" data-room-inline="invite" data-room-id="${escapeHtml(room.roomId)}" type="button">Пригласить</button>
                 <button class="ghost-btn" data-room-inline="leave" data-room-id="${escapeHtml(room.roomId)}" type="button">Покинуть</button>
             </div>
@@ -1881,24 +1610,57 @@ async function openUserProfile(userId) {
         try {
             const profile = await state.client.getProfileInfo(userId).catch(() => ({}));
             const sharedCount = getJoinedRoomsSorted().filter((room) => room.getJoinedMembers?.().some((member) => member.userId === userId)).length;
+            const avatarHtml = await buildAvatarMarkup(
+                profile.displayname || userId,
+                profile.avatar_url || state.client.getUser?.(userId)?.avatarUrl || "",
+                "modal-hero-avatar profile-avatar-xl",
+            );
+            const blocked = (state.ui.blockedUsers || []).includes(userId);
+
             openModal(
                 profile.displayname || userId,
                 userId,
                 `
-                    <div class="settings-profile">
-                        <div class="profile-avatar">${escapeHtml(initialsFromName(profile.displayname || userId))}</div>
-                        <div class="profile-copy">
-                            <div class="profile-name">${escapeHtml(profile.displayname || userId)}</div>
-                            <div class="profile-id">${escapeHtml(userId)}</div>
-                            <div class="profile-meta-row">
+                    <div class="modal-hero modal-hero-profile">
+                        ${avatarHtml}
+                        <div class="modal-hero-copy">
+                            <div class="modal-kicker">User profile</div>
+                            <div class="modal-hero-title">${escapeHtml(profile.displayname || userId)}</div>
+                            <div class="modal-hero-subtitle">${escapeHtml(userId)}</div>
+                            <div class="hero-badge-row">
                                 <span class="state-pill">Shared rooms ${sharedCount}</span>
-                                ${(state.ui.blockedUsers || []).includes(userId) ? '<span class="state-pill is-muted">Blocked</span>' : ''}
+                                ${blocked ? '<span class="state-pill is-muted">Blocked</span>' : '<span class="state-pill">Доступен для DM</span>'}
                             </div>
                         </div>
                     </div>
-                    <div class="inline-actions">
+
+                    <div class="detail-grid detail-grid-quad">
+                        <div class="detail-card">
+                            <div class="info-label">Display name</div>
+                            <div class="info-value">${escapeHtml(profile.displayname || "Не задан")}</div>
+                        </div>
+                        <div class="detail-card">
+                            <div class="info-label">Matrix ID</div>
+                            <div class="info-value">${escapeHtml(userId)}</div>
+                        </div>
+                        <div class="detail-card">
+                            <div class="info-label">Shared rooms</div>
+                            <div class="info-value">${sharedCount}</div>
+                        </div>
+                        <div class="detail-card">
+                            <div class="info-label">Статус</div>
+                            <div class="info-value">${blocked ? "Локально заблокирован" : "Активен"}</div>
+                        </div>
+                    </div>
+
+                    <div class="room-info-card feature-card muted-card">
+                        <div class="info-label">Что умеет этот экран</div>
+                        <div class="info-value">Открывает реальный Matrix-профиль, позволяет начать DM и локально скрыть пользователя без фейковых server-side обещаний.</div>
+                    </div>
+
+                    <div class="inline-actions action-grid wide-actions">
                         <button class="primary-btn" data-user-inline="start-dm" data-user-id="${escapeHtml(userId)}" type="button">Начать диалог</button>
-                        <button class="ghost-btn" data-user-inline="toggle-block" data-user-id="${escapeHtml(userId)}" type="button">${(state.ui.blockedUsers || []).includes(userId) ? "Разблокировать" : "Заблокировать"}</button>
+                        <button class="ghost-btn" data-user-inline="toggle-block" data-user-id="${escapeHtml(userId)}" type="button">${blocked ? "Разблокировать" : "Заблокировать"}</button>
                     </div>
                 `,
             );
@@ -2243,10 +2005,7 @@ function getEventBody(event) {
 function getPreviewText(event, room) {
     if (!event) return isEncryptedRoom(room) ? "Encrypted room" : "Сообщений пока нет";
     if (event.getType?.() === "m.room.encrypted") return "Не расшифровано";
-    const content = event.getContent?.() || {};
-    let body = getEventBody(event).replace(/\s+/g, " ").trim();
-    if (content.msgtype === "m.image") body = `🖼 ${content.body || "Изображение"}`;
-    if (content.msgtype === "m.file") body = `📎 ${content.body || "Файл"}`;
+    const body = getEventBody(event).replace(/\s+/g, " ").trim();
     const sender = event.getSender?.() === state.session?.userId ? "Вы" : (room.getMember?.(event.getSender?.())?.name || event.getSender?.() || "");
     return `${sender ? `${sender}: ` : ""}${body || "Сообщение"}`;
 }
@@ -2272,7 +2031,6 @@ function getJoinedRoomsSorted() {
     return state.client.getRooms()
         .filter((room) => room.getMyMembership?.() === "join")
         .filter((room) => !(state.ui.blockedUsers || []).some((userId) => room.getJoinedMembers?.().some((member) => member.userId === userId)))
-        .filter((room) => state.settings.showMutedRooms || !(state.ui.mutedRooms || []).includes(room.roomId))
         .sort((a, b) => getRoomSortTimestamp(b) - getRoomSortTimestamp(a));
 }
 
@@ -2422,11 +2180,7 @@ function usernameToLocalpart(input) {
 
 function formatTime(timestamp) {
     const date = new Date(Number(timestamp) || Date.now());
-    return date.toLocaleTimeString("ru-RU", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: !state.settings.use24HourTime,
-    });
+    return date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 }
 
 function formatDateLabel(timestamp) {

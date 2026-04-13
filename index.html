@@ -15,7 +15,7 @@
                 <div class="auth-logo">M</div>
                 <div>
                     <h1>Ficus Matrix App</h1>
-                    <p>Matrix web client в тёмной красно-серой системе: плотный, чистый, телеграм-подобный по удобству, но честный по Matrix-функциям.</p>
+                    <p>Отдельный web-клиент для <strong>app.ficus.vu</strong> в тёмной красно-серой системе без декоративного шума.</p>
                 </div>
             </div>
 
@@ -29,36 +29,17 @@
                     <span>Homeserver URL</span>
                     <input id="authHomeserver" type="url" placeholder="https://matrix.org" autocomplete="url" required>
                 </label>
-
-                <div class="auth-inline-row">
-                    <button class="secondary-btn" id="checkServerBtn" type="button">Проверить сервер</button>
-                    <button class="ghost-btn hidden" id="checkUsernameBtn" type="button">Проверить логин</button>
-                </div>
-
-                <div class="auth-server-meta hidden" id="authServerMeta"></div>
-                <div class="auth-server-history hidden" id="authServerHistory"></div>
-
                 <label class="field">
                     <span>Логин / Matrix ID</span>
                     <input id="authUsername" type="text" placeholder="@user:server или localpart" autocomplete="username" required>
                 </label>
-                <div class="auth-inline-help hidden" id="authUsernameHint"></div>
-
                 <label class="field">
                     <span>Пароль</span>
                     <input id="authPassword" type="password" placeholder="••••••••" autocomplete="current-password" required>
                 </label>
-                <label class="field hidden" id="authPasswordConfirmField">
-                    <span>Повторите пароль</span>
-                    <input id="authPasswordConfirm" type="password" placeholder="Повторите пароль" autocomplete="new-password">
-                </label>
                 <label class="field hidden" id="authDisplayNameField">
                     <span>Display name</span>
                     <input id="authDisplayName" type="text" placeholder="Как вас показывать в клиентах">
-                </label>
-                <label class="field">
-                    <span>Название устройства</span>
-                    <input id="authDeviceName" type="text" placeholder="Ficus Matrix Web" value="Ficus Matrix Web">
                 </label>
                 <label class="toggle-row compact">
                     <input id="authEnableCrypto" type="checkbox" checked>
@@ -69,7 +50,7 @@
             </form>
 
             <div class="auth-footnote">
-                Для старых зашифрованных сообщений этому устройству нужен рабочий key backup: secret storage, recovery key или passphrase. Если homeserver требует CAPTCHA, email-подтверждение или кастомный UIA-flow, клиент честно покажет это как ограничение сервера.
+                Для чтения старых зашифрованных сообщений у устройства должен быть доступ к key backup: через secret storage, recovery key или passphrase.
             </div>
         </div>
     </section>
@@ -119,15 +100,8 @@
                 <div class="list-header-row">
                     <div>
                         <h2>Чаты</h2>
-                        <p>Telegram-like структура: закреплённые, DM, группы, черновики</p>
+                        <p>DM, группы, закреплённые комнаты</p>
                     </div>
-                </div>
-                <div class="folder-chips" id="chatFolderChips">
-                    <button class="folder-chip active" data-folder="all" type="button">Все</button>
-                    <button class="folder-chip" data-folder="unread" type="button">Непрочитанные</button>
-                    <button class="folder-chip" data-folder="dm" type="button">DM</button>
-                    <button class="folder-chip" data-folder="groups" type="button">Группы</button>
-                    <button class="folder-chip" data-folder="encrypted" type="button">E2EE</button>
                 </div>
                 <div class="section-block" id="chatPinnedSection"></div>
                 <div class="section-block" id="chatDmSection"></div>
@@ -139,7 +113,7 @@
                 <div class="list-header-row stacked">
                     <div>
                         <h2>Публичные комнаты</h2>
-                        <p>Поиск по директории homeserver и быстрый join</p>
+                        <p>Поиск по директории и join</p>
                     </div>
                     <div class="inline-form">
                         <input id="publicSearchInput" type="text" placeholder="alias, room id или текст поиска">
@@ -155,7 +129,7 @@
                 <div class="list-header-row">
                     <div>
                         <h2>Приватные комнаты</h2>
-                        <p>Закрытые комнаты, DM и encrypted rooms</p>
+                        <p>Закрытые комнаты и encrypted rooms</p>
                     </div>
                 </div>
                 <div class="section-block" id="privateRoomsSection"></div>
@@ -198,7 +172,7 @@
                 </section>
 
                 <section class="settings-group">
-                    <div class="settings-group-title">Сессия и сеть</div>
+                    <div class="settings-group-title">Сессия</div>
                     <div class="settings-item static">
                         <span>Homeserver</span>
                         <span class="settings-item-value" id="homeserverInfoValue">—</span>
@@ -211,14 +185,6 @@
                         <span>Device ID</span>
                         <span class="settings-item-value" id="deviceInfoValue">—</span>
                     </div>
-                    <button class="settings-item" id="reconnectBtn" type="button">
-                        <span>Переподключить sync</span>
-                        <span class="settings-item-value">Retry</span>
-                    </button>
-                    <button class="settings-item" id="copySessionBtn" type="button">
-                        <span>Скопировать данные сессии</span>
-                        <span class="settings-item-value">Copy</span>
-                    </button>
                     <button class="settings-item danger" id="logoutBtn" type="button">
                         <span>Выйти</span>
                         <span class="settings-item-value">Logout</span>
@@ -239,34 +205,6 @@
                         <span>Компактный режим</span>
                         <input type="checkbox" id="settingCompactMode">
                     </label>
-                    <label class="settings-toggle">
-                        <span>Показывать muted rooms</span>
-                        <input type="checkbox" id="settingShowMutedRooms" checked>
-                    </label>
-                    <label class="settings-toggle">
-                        <span>Аватары в списках</span>
-                        <input type="checkbox" id="settingShowAvatars" checked>
-                    </label>
-                    <label class="settings-toggle">
-                        <span>24-часовой формат времени</span>
-                        <input type="checkbox" id="settingUse24HourTime" checked>
-                    </label>
-                    <label class="settings-toggle">
-                        <span>Подтверждать выход из комнаты</span>
-                        <input type="checkbox" id="settingConfirmLeaveRoom">
-                    </label>
-                </section>
-
-                <section class="settings-group">
-                    <div class="settings-group-title">Локальные данные</div>
-                    <button class="settings-item" id="clearDraftsBtn" type="button">
-                        <span>Очистить черновики</span>
-                        <span class="settings-item-value">Reset</span>
-                    </button>
-                    <button class="settings-item" id="resetUiBtn" type="button">
-                        <span>Сбросить локальные пины / muted / фильтры</span>
-                        <span class="settings-item-value">Reset</span>
-                    </button>
                 </section>
 
                 <section class="settings-group">
@@ -282,7 +220,7 @@
             <div class="empty-state-container" id="emptyState">
                 <div class="empty-state-card">
                     <div class="empty-state-title">Выберите комнату</div>
-                    <div class="empty-state-text">Чаты, публичные комнаты и приватные диалоги загружаются из Matrix homeserver в реальном времени. Закрепления, фильтры и черновики работают как локальный UX-слой поверх Matrix.</div>
+                    <div class="empty-state-text">Чаты, публичные комнаты и приватные диалоги загружаются из Matrix homeserver в реальном времени.</div>
                 </div>
             </div>
 
