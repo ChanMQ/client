@@ -1,0 +1,1347 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>e2e.mom — Авторизация</title>
+    <style>
+        @font-face {
+            font-family: 'Manrope';
+            src: local('Manrope Regular'), url('./Manrope-Regular.woff2') format('woff2');
+            font-weight: 400;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Manrope';
+            src: local('Manrope Medium'), url('./Manrope-Medium.woff2') format('woff2');
+            font-weight: 500;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Manrope';
+            src: local('Manrope SemiBold'), url('./Manrope-SemiBold.woff2') format('woff2');
+            font-weight: 600;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Manrope';
+            src: local('Manrope Bold'), url('./Manrope-Bold.woff2') format('woff2');
+            font-weight: 700;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        :root {
+            /* Строгая палитра "clean tech" */
+            --bg-base: #0b0b0d;
+            --bg-surface: #151518;
+            --bg-hover: #1c1c20;
+            --accent: #da4a44;
+            --accent-hover: #e35650;
+            --accent-dark: #8b2b28; /* Тёмно-красный для наведения */
+            --accent-soft: rgba(218, 74, 68, 0.12);
+            --text-main: #ffffff;
+            --text-muted: #8e8e93;
+            --border: #2c2c30;
+            --border-hover: #3a3a40;
+
+            --radius-elem: 14px;
+            --ios-ease: cubic-bezier(0.3, 0, 0.1, 1);
+            --font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Цвет выделения текста */
+        ::selection {
+            background-color: var(--accent);
+            color: #ffffff;
+        }
+        ::-moz-selection {
+            background-color: var(--accent);
+            color: #ffffff;
+        }
+
+        html, body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            font-family: var(--font-family);
+            color-scheme: dark;
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            position: relative;
+
+            /* Запрет выделения текста на всей странице */
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+
+        /* Блокируем скроллбар во время предзагрузки */
+        body.loading { overflow: hidden; }
+
+        /* Разрешаем выделение только внутри инпутов */
+        input {
+            -webkit-user-select: auto;
+            -moz-user-select: auto;
+            -ms-user-select: auto;
+            user-select: auto;
+            color-scheme: dark;
+            font-family: var(--font-family);
+            color: var(--text-main);
+            -webkit-text-fill-color: var(--text-main);
+            caret-color: var(--accent) !important; /* Мигающий курсор красный */
+        }
+
+        /* --- КАСТОМНЫЙ PRELOADER --- */
+        #preloader {
+            position: fixed;
+            inset: 0;
+            background-color: var(--bg-base);
+            z-index: 99999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0;
+            transition: opacity 0.5s var(--ios-ease), visibility 0.5s var(--ios-ease);
+        }
+
+        #preloader.hidden {
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        .lava-spinner {
+            width: 36px;
+            height: 36px;
+            animation: rotateLava 1.5s linear infinite;
+        }
+
+        .lava-spinner circle {
+            stroke-dasharray: 90, 150;
+            stroke-dashoffset: 0;
+            animation: dashLava 1.5s ease-in-out infinite;
+        }
+
+        @keyframes rotateLava { 100% { transform: rotate(360deg); } }
+        @keyframes dashLava {
+            0% { stroke-dasharray: 1, 150; stroke-dashoffset: 0; }
+            50% { stroke-dasharray: 90, 150; stroke-dashoffset: -35; }
+            100% { stroke-dasharray: 90, 150; stroke-dashoffset: -124; }
+        }
+
+        .auth-container {
+            width: 100%;
+            max-width: 400px;
+            padding: 8vh 24px 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            z-index: 1;
+            animation: fadeUp 0.6s var(--ios-ease) forwards;
+            opacity: 0;
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(16px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* --- ИНТЕГРИРОВАННАЯ КНОПКА ВЫБОРА ЯЗЫКА --- */
+        .lang-toggle {
+            position: absolute;
+            top: 24px;
+            right: 24px;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            border-radius: 12px;
+            padding: 8px 12px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s var(--ios-ease);
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .lang-toggle:hover {
+            color: var(--text-main);
+            background: var(--bg-surface);
+        }
+
+        .lang-toggle:active {
+            transform: scale(0.96);
+        }
+
+        .lang-toggle svg { width: 16px; height: 16px; opacity: 0.8; }
+
+        /* Уникальный Логотип e2e */
+        .logo-area {
+            width: 88px;
+            height: 88px;
+            margin-top: 16px;
+            margin-bottom: 24px;
+            border-radius: 22px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .logo-area svg { width: 48px; height: 48px; }
+
+        .auth-header {
+            text-align: center;
+            margin-bottom: 32px;
+            width: 100%;
+        }
+
+        .auth-header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 10px;
+        }
+
+        .auth-header p {
+            font-size: 15px;
+            color: var(--text-muted);
+            line-height: 1.4;
+            max-width: 340px;
+            margin: 0 auto;
+            min-height: 42px;
+        }
+
+        .reset-info-box {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-elem);
+            padding: 14px 16px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            color: var(--text-main);
+            line-height: 1.5;
+            text-align: center;
+            width: 100%;
+        }
+
+        .reset-info-box span {
+            color: var(--accent);
+            font-weight: 600;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            white-space: normal;
+        }
+
+        /* ==========================================
+           ФОРМА И СИСТЕМА СОСТОЯНИЙ (CSS ПЕРЕМЕННЫЕ)
+           ========================================== */
+        .auth-form {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .input-group {
+            position: relative;
+            width: 100%;
+            /* Дефолтное состояние */
+            --current-border: var(--border);
+            --current-label: var(--text-muted);
+        }
+
+        /* 1. Наведение (Hover) */
+        .input-group:hover {
+            --current-border: var(--accent-dark);
+            --current-label: var(--accent-dark);
+        }
+
+        /* 2. Фокус (Focus-within) - перебивает hover */
+        .input-group:focus-within,
+        .input-group.open {
+            --current-border: var(--accent);
+            --current-label: var(--accent);
+        }
+
+        /* 3. Ошибка (Invalid) - перебивает всё */
+        .input-group.invalid {
+            --current-border: var(--accent) !important;
+            --current-label: var(--accent) !important;
+            animation: shake 0.4s var(--ios-ease);
+        }
+
+        /* Поле ввода */
+        .input-field {
+            width: 100%;
+            background: var(--bg-base);
+            border: 1px solid var(--current-border) !important;
+            border-radius: var(--radius-elem);
+            padding: 18px 16px;
+            color: var(--text-main);
+            -webkit-text-fill-color: var(--text-main);
+            font-family: var(--font-family);
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.2s var(--ios-ease), box-shadow 0.2s var(--ios-ease);
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-clip: padding-box;
+            box-shadow: 0 0 0 1000px var(--bg-base) inset, 0 0 0 1px var(--current-border) !important;
+            height: 54px;
+        }
+
+        .input-field.has-icon { padding-right: 48px; }
+
+        /* Фикс браузерного автозаполнения */
+        input:-webkit-autofill,
+        input:-webkit-autofill:hover,
+        input:-webkit-autofill:focus,
+        input:-webkit-autofill:active {
+            -webkit-text-fill-color: var(--text-main) !important;
+            color: var(--text-main) !important;
+            caret-color: var(--accent) !important;
+            font-family: var(--font-family) !important;
+            text-shadow: 0 0 0 var(--text-main) !important;
+            border: 1px solid var(--current-border) !important;
+            -webkit-box-shadow: 0 0 0 1000px var(--bg-base) inset, 0 0 0 1px var(--current-border) !important;
+            box-shadow: 0 0 0 1000px var(--bg-base) inset, 0 0 0 1px var(--current-border) !important;
+            transition: background-color 999999s ease-out 0s, color 999999s ease-out 0s !important;
+        }
+
+        /* Текст над полем (Лейбл) */
+        .input-label {
+            position: absolute;
+            left: 12px;
+            top: 17px;
+            color: var(--current-label) !important;
+            font-size: 16px;
+            pointer-events: none;
+            background: var(--bg-base);
+            padding: 0 4px;
+            transform-origin: left top;
+            transition: transform 0.2s var(--ios-ease), color 0.2s var(--ios-ease);
+        }
+
+        /* Поднимаем лейбл вверх при фокусе или если есть текст */
+        .input-field:focus + .input-label,
+        .input-field:not(:placeholder-shown) + .input-label,
+        .input-group.open .input-label {
+            transform: translateY(-26px) scale(0.85);
+        }
+
+        /* Иконки внутри полей */
+        .input-icon-btn {
+            position: absolute;
+            right: 8px;
+            top: 27px;
+            transform: translateY(-50%);
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .input-icon-btn:hover { color: var(--text-main); }
+        .chevron-icon { pointer-events: none; transition: transform 0.25s var(--ios-ease); }
+        .input-group.open .chevron-icon { transform: rotate(180deg); }
+
+        /* КАСТОМНЫЕ ОШИБКИ ВАЛИДАЦИИ */
+        .error-text {
+            color: var(--accent);
+            font-size: 13px;
+            margin-top: 6px;
+            margin-left: 16px;
+            display: none;
+        }
+
+        .input-group.invalid .error-text { display: block; }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-4px); }
+            40%, 80% { transform: translateX(4px); }
+        }
+
+        /* Выпадающее меню Homeserver */
+        .dropdown-menu {
+            position: absolute;
+            top: calc(54px + 8px);
+            left: 0;
+            width: 100%;
+            background: var(--bg-surface);
+            /* Толстая серая обводка */
+            border: 2px solid var(--border-hover);
+            border-radius: var(--radius-elem);
+            overflow: hidden;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-10px);
+            transition: all 0.2s var(--ios-ease);
+            z-index: 100;
+        }
+
+        .input-group.open .dropdown-menu {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        /* Выезд блока с серверами СПРАВА на ПК экранах */
+        @media (min-width: 992px) {
+            .dropdown-menu {
+                top: 0;
+                left: calc(100% + 20px);
+                width: 280px;
+                transform: translateX(-15px);
+            }
+            .input-group.open .dropdown-menu {
+                transform: translateX(0);
+            }
+        }
+
+        .dropdown-header {
+            padding: 16px 16px 8px;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            font-weight: 700;
+            background: transparent;
+        }
+
+        .dropdown-item {
+            padding: 14px 16px;
+            font-size: 15px;
+            color: var(--text-main);
+            cursor: pointer;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.1s ease;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .dropdown-item small { font-size: 13px; color: var(--text-muted); }
+        .dropdown-item:last-child { border-bottom: none; }
+        .dropdown-item:hover { background: var(--bg-hover); }
+
+        .forgot-pass-container {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: -4px;
+            margin-bottom: 4px;
+        }
+
+        .forgot-pass-link {
+            color: var(--accent);
+            font-size: 14px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: opacity 0.2s;
+        }
+        .forgot-pass-link:hover { opacity: 0.8; }
+
+        /* Кнопки */
+        .actions-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 16px;
+            width: 100%;
+        }
+
+        .primary-btn, .secondary-btn {
+            width: 100%;
+            height: 54px;
+            border: none;
+            border-radius: var(--radius-elem);
+            font-family: var(--font-family); /* Принудительно подключаем шрифт */
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            cursor: pointer;
+            transition: background 0.2s ease, transform 0.1s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-transform: uppercase;
+        }
+
+        .primary-btn { background: var(--accent); color: #ffffff; }
+        .primary-btn:hover { background: var(--accent-hover); }
+        .primary-btn:active { transform: scale(0.98); }
+
+        .secondary-btn { background: var(--accent-soft); color: var(--accent); }
+        .secondary-btn:hover { background: rgba(218, 74, 68, 0.18); }
+        .secondary-btn:active { transform: scale(0.98); }
+
+        .spinner {
+            display: none;
+            width: 22px;
+            height: 22px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #ffffff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .auth-server-error {
+            display: none;
+            width: 100%;
+            background: rgba(218, 74, 68, 0.12);
+            border: 1px solid rgba(218, 74, 68, 0.32);
+            color: #ffb1ad;
+            border-radius: var(--radius-elem);
+            padding: 12px 14px;
+            font-size: 14px;
+            line-height: 1.45;
+        }
+        .auth-server-error.show {
+            display: block;
+        }
+        .hidden { display: none !important; }
+
+        /* --- УЛУЧШЕННОЕ ОКНО ЯЗЫКОВ --- */
+        .lang-modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.25s ease, visibility 0.25s ease;
+        }
+
+        .lang-modal-overlay.active { opacity: 1; visibility: visible; }
+
+        .lang-modal {
+            width: 100%;
+            max-width: 340px;
+            background: var(--bg-surface);
+            /* Толстая серая обводка */
+            border: 2px solid var(--border-hover);
+            border-radius: 18px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transform: scale(0.98) translateY(10px);
+            transition: transform 0.25s var(--ios-ease);
+            box-shadow: none;
+        }
+
+        .lang-modal-overlay.active .lang-modal { transform: scale(1) translateY(0); }
+
+        .lang-modal-header {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .lang-search-wrapper { position: relative; flex: 1; }
+        .lang-search-wrapper svg {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+        }
+
+        .lang-search-input {
+            width: 100%;
+            background: var(--bg-base);
+            border: 1px solid transparent;
+            border-radius: 10px;
+            padding: 10px 12px 10px 36px;
+            color: var(--text-main);
+            font-family: var(--font-family); /* Принудительно подключаем шрифт */
+            font-size: 15px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .lang-search-input:focus { border-color: var(--border-hover); }
+
+        .lang-close-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            width: 38px;
+            height: 38px;
+            flex-shrink: 0;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s var(--ios-ease);
+        }
+
+        .lang-close-btn:hover {
+            background: var(--bg-hover);
+            color: var(--text-main);
+        }
+
+        .lang-list {
+            height: 320px;
+            overflow-y: auto;
+            padding: 4px 0;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border) transparent;
+        }
+
+        .lang-list::-webkit-scrollbar { width: 6px; }
+        .lang-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+
+        .lang-item {
+            padding: 14px 20px;
+            font-size: 15px;
+            color: var(--text-main);
+            cursor: pointer;
+            transition: background 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        .lang-item:last-child {
+            border-bottom: none;
+        }
+
+        .lang-item:hover { background: var(--bg-hover); }
+
+        .lang-item.selected {
+            color: var(--accent);
+            font-weight: 600;
+            background: var(--accent-soft);
+        }
+
+        .lang-item.selected:hover {
+            background: rgba(218, 74, 68, 0.18);
+        }
+
+        .lang-item.selected svg {
+            color: var(--accent);
+            flex-shrink: 0;
+        }
+
+        .lang-empty {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 15px;
+        }
+
+        @media (max-width: 480px) {
+            .lang-modal-overlay { align-items: flex-end; }
+            .lang-modal {
+                max-width: 100%;
+                border-radius: 20px 20px 0 0;
+                border-bottom: none;
+                border-left: none;
+                border-right: none;
+                transform: translateY(100%);
+            }
+            .lang-modal-overlay.active .lang-modal { transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="loading">
+
+    <div id="preloader">
+        <svg class="lava-spinner" viewBox="0 0 50 50">
+            <defs>
+                <linearGradient id="lavaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#ff512f" />
+                    <stop offset="100%" stop-color="#da4a44" />
+                </linearGradient>
+            </defs>
+            <circle cx="25" cy="25" r="20" fill="none" stroke="url(#lavaGrad)" stroke-width="4" stroke-linecap="round" />
+        </svg>
+    </div>
+
+    <div class="lang-modal-overlay" id="langModalOverlay" onclick="closeLangModal(event)">
+        <div class="lang-modal" id="langModal">
+            <div class="lang-modal-header">
+                <div class="lang-search-wrapper">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <input type="text" class="lang-search-input" id="langSearch" placeholder="Поиск языка..." oninput="filterLanguages()">
+                </div>
+                <button class="lang-close-btn" onclick="closeLangModalBtn()">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="lang-list" id="langList">
+                </div>
+        </div>
+    </div>
+
+    <div class="auth-container">
+        <button class="lang-toggle" onclick="openLangModal()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+            </svg>
+            <span id="currentLangBtnText">English</span>
+        </button>
+
+        <div class="logo-area">
+            <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M 24 42 L 14 30 L 6 22 L 12 8 L 18 16 L 24 18 L 30 16 L 36 8 L 42 22 L 34 30 Z" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round"/>
+
+                <path d="M 24 42 L 24 26" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
+                <path d="M 14 30 L 24 26 L 34 30" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round"/>
+                <path d="M 6 22 L 24 26 L 42 22" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round"/>
+                <path d="M 18 16 L 24 26 L 30 16" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round"/>
+
+                <polygon points="12,20 20,23 15,24" fill="#da4a44">
+                    <animate attributeName="opacity" values="1;0.3;1" dur="3s" repeatCount="indefinite" />
+                </polygon>
+                <polygon points="36,20 28,23 33,24" fill="#da4a44">
+                    <animate attributeName="opacity" values="1;0.3;1" dur="3s" repeatCount="indefinite" begin="0.15s" />
+                </polygon>
+
+                <circle cx="24" cy="26" r="2.5" fill="#151518" stroke="#ffffff" stroke-width="2"/>
+                <circle cx="24" cy="42" r="2.5" fill="#151518" stroke="#ffffff" stroke-width="2"/>
+            </svg>
+        </div>
+
+        <div class="auth-header">
+            <h1>e2e.mom</h1>
+            <p id="headerSubtitle">Укажите свой homeserver и введите данные для входа.</p>
+        </div>
+
+        <form class="auth-form" id="authForm" novalidate onsubmit="handleAuth(event)">
+
+            <div class="input-group" id="hsGroup">
+                <input type="text" id="homeserver" class="input-field has-icon" placeholder=" " value="" autocomplete="off" onfocus="openDropdown()" oninput="handleInput(this)">
+                <label class="input-label" id="lblHomeserver">Homeserver (напр. matrix.org)</label>
+
+                <button type="button" class="input-icon-btn" onclick="toggleDropdown(event)" tabindex="-1">
+                    <svg class="chevron-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                </button>
+
+                <div class="dropdown-menu" id="hsMenu">
+                    <div class="dropdown-header" id="txtPopularServers">Популярные серверы</div>
+                    <div class="dropdown-item" onclick="selectServer('matrix.org')">
+                        matrix.org
+                        <small>Публичная сеть Matrix</small>
+                    </div>
+                    <div class="dropdown-item" onclick="selectServer('mozilla.org')">
+                        mozilla.org
+                        <small>Mozilla Foundation</small>
+                    </div>
+                    <div class="dropdown-item" onclick="selectServer('kde.org')">
+                        kde.org
+                        <small>KDE Community</small>
+                    </div>
+                    <div class="dropdown-item" onclick="selectServer('tchncs.de')">
+                        tchncs.de
+                        <small>Tech & Privacy</small>
+                    </div>
+                    <div class="dropdown-item" onclick="selectServer('ubuntu.com')">
+                        ubuntu.com
+                        <small>Ubuntu Community</small>
+                    </div>
+                </div>
+                <div class="error-text"></div>
+            </div>
+
+            <div class="reset-info-box hidden" id="resetInfoBox">
+                Сервер <span id="resetHsName">matrix.org</span> отправит письмо со ссылкой для сброса пароля.
+            </div>
+
+            <div class="input-group" id="userGroup">
+                <input type="text" id="username" class="input-field" placeholder=" " autocomplete="username" oninput="clearError(this)">
+                <label class="input-label" id="lblUsername">Логин или @user:server</label>
+                <div class="error-text"></div>
+            </div>
+
+            <div class="input-group hidden" id="emailGroup">
+                <input type="email" id="email" class="input-field" placeholder=" " autocomplete="email" oninput="clearError(this)">
+                <label class="input-label" id="lblEmail">Email</label>
+                <div class="error-text"></div>
+            </div>
+
+            <div class="input-group">
+                <input type="password" id="password" class="input-field has-icon" placeholder=" " autocomplete="current-password" oninput="clearError(this)">
+                <label class="input-label" id="lblPassword">Пароль</label>
+                <button type="button" class="input-icon-btn" onclick="togglePasswordVisibility('password', this)" tabindex="-1">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22"></path>
+                    </svg>
+                </button>
+                <div class="error-text"></div>
+            </div>
+
+            <div class="forgot-pass-container" id="forgotLinkWrap">
+                <a href="#" class="forgot-pass-link" id="lnkForgot" onclick="setMode('reset'); return false;">Забыли пароль?</a>
+            </div>
+
+            <div class="input-group hidden" id="confirmPasswordGroup">
+                <input type="password" id="confirmPassword" class="input-field has-icon" placeholder=" " oninput="clearError(this)">
+                <label class="input-label" id="lblConfirm">Подтвердите пароль</label>
+                <button type="button" class="input-icon-btn" onclick="togglePasswordVisibility('confirmPassword', this)" tabindex="-1">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22"></path>
+                    </svg>
+                </button>
+                <div class="error-text"></div>
+            </div>
+
+            <div class="auth-server-error" id="authServerError"></div>
+
+            <div class="actions-wrapper">
+                <button type="submit" class="primary-btn" id="primaryBtn">
+                    <span id="btnText">ПРОДОЛЖИТЬ</span>
+                    <div class="spinner" id="btnSpinner"></div>
+                </button>
+
+                <button type="button" class="secondary-btn" id="secondaryBtn" onclick="toggleMainMode()">
+                    СОЗДАТЬ АККАУНТ
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        // --- УБИРАЕМ PRELOADER ПОСЛЕ ЗАГРУЗКИ ---
+        window.addEventListener('load', () => {
+            const preloader = document.getElementById('preloader');
+            setTimeout(() => {
+                preloader.classList.add('hidden');
+                document.body.classList.remove('loading');
+            }, 600);
+        });
+
+        // --- ДАННЫЕ О ЯЗЫКАХ ---
+        const languages = [
+            { code: 'cy', name: 'Cymraeg' }, { code: 'de', name: 'Deutsch' }, { code: 'en', name: 'English' },
+            { code: 'eo', name: 'Esperanto' }, { code: 'id', name: 'Indonesia' }, { code: 'mg', name: 'Malagasy' },
+            { code: 'nl', name: 'Nederlands' }, { code: 'vi', name: 'Tiếng Việt' }, { code: 'tr', name: 'Türkçe' },
+            { code: 'da', name: 'Dansk' }, { code: 'et', name: 'Eesti' }, { code: 'es', name: 'Español' },
+            { code: 'fr', name: 'Français' }, { code: 'gl', name: 'Galego' }, { code: 'hr', name: 'Hrvatski' },
+            { code: 'it', name: 'Italiano' }, { code: 'lv', name: 'Latviešu' }, { code: 'lt', name: 'Lietuvių' },
+            { code: 'hu', name: 'Magyar' }, { code: 'nb-no', name: 'Norsk bokmål' }, { code: 'pl', name: 'Polski' },
+            { code: 'pt', name: 'Português' }, { code: 'pt-br', name: 'Português (Brasil)' }, { code: 'sq', name: 'Shqip' },
+            { code: 'sk', name: 'Slovenčina' }, { code: 'fi', name: 'Suomi' }, { code: 'sv', name: 'Svenska' },
+            { code: 'is', name: 'Íslenska' }, { code: 'cs', name: 'Čeština' }, { code: 'el', name: 'Ελληνικά' },
+            { code: 'ru', name: 'Русский' }, { code: 'uk', name: 'Українська' }, { code: 'hy', name: 'Հայերեն' },
+            { code: 'he', name: 'עברית' }, { code: 'fa', name: 'فارسی' }, { code: 'lo', name: 'ລາວ' },
+            { code: 'ka', name: 'ქართული' }, { code: 'ja', name: '日本語' }, { code: 'zh-hans', name: '简体中文' },
+            { code: 'zh-hant', name: '繁體中文' }, { code: 'ko', name: '한국어' }
+        ];
+
+        let currentLangCode = 'ru';
+
+        const i18n = {
+            ru: {
+                searchPlace: "Поиск языка...",
+                langEmpty: "Язык не найден",
+                subLogin: "Укажите свой homeserver и введите данные для входа.",
+                subRegister: "Укажите сервер и придумайте данные для нового аккаунта.",
+                subReset: "Восстановление доступа к аккаунту.",
+                lblHomeserver: "Homeserver (напр. matrix.org)",
+                txtPopularServers: "Популярные серверы",
+                lblUsernameLogin: "Логин или @user:server",
+                lblUsernameReg: "Логин",
+                lblEmail: "Email",
+                lblPasswordLogin: "Пароль",
+                lblPasswordReg: "Придумайте пароль",
+                lblPasswordReset: "Новый пароль",
+                lblConfirm: "Подтвердите пароль",
+                lnkForgot: "Забыли пароль?",
+                btnContinue: "ВОЙТИ В АККАУНТ",
+                btnRegister: "ЗАРЕГИСТРИРОВАТЬСЯ",
+                btnReset: "СБРОСИТЬ ПАРОЛЬ",
+                btnSwitchReg: "СОЗДАТЬ АККАУНТ",
+                btnSwitchLogin: "ВЕРНУТЬСЯ КО ВХОДУ",
+                resetInfoHtml: "Сервер <span id='resetHsName'>{hs}</span> отправит письмо со ссылкой для сброса пароля.",
+                errRequired: "Обязательное поле",
+                errEmail: "Некорректный email",
+                errPasswordMatch: "Пароли не совпадают"
+            },
+            en: {
+                searchPlace: "Search language...",
+                langEmpty: "Language not found",
+                subLogin: "Enter your homeserver and login details.",
+                subRegister: "Enter a server and create details for your new account.",
+                subReset: "Restore access to your account.",
+                lblHomeserver: "Homeserver (e.g. matrix.org)",
+                txtPopularServers: "Popular Servers",
+                lblUsernameLogin: "Username or @user:server",
+                lblUsernameReg: "Username",
+                lblEmail: "Email",
+                lblPasswordLogin: "Password",
+                lblPasswordReg: "Create Password",
+                lblPasswordReset: "New Password",
+                lblConfirm: "Confirm Password",
+                lnkForgot: "Forgot Password?",
+                btnContinue: "LOG IN",
+                btnRegister: "REGISTER",
+                btnReset: "RESET PASSWORD",
+                btnSwitchReg: "CREATE ACCOUNT",
+                btnSwitchLogin: "BACK TO LOGIN",
+                resetInfoHtml: "Homeserver <span id='resetHsName'>{hs}</span> will send you an email to reset your password.",
+                errRequired: "Required field",
+                errEmail: "Invalid email",
+                errPasswordMatch: "Passwords do not match"
+            }
+        };
+
+        // --- ЛОГИКА ВЫБОРА ЯЗЫКА ---
+        const langModalOverlay = document.getElementById('langModalOverlay');
+        const langListEl = document.getElementById('langList');
+        const langSearchInput = document.getElementById('langSearch');
+        const currentLangBtnText = document.getElementById('currentLangBtnText');
+
+        function renderLanguages(filterText = '') {
+            langListEl.innerHTML = '';
+            const filtered = languages.filter(l => l.name.toLowerCase().includes(filterText.toLowerCase()));
+
+            if (filtered.length === 0) {
+                const dict = i18n[i18n[currentLangCode] ? currentLangCode : 'en'];
+                langListEl.innerHTML = `<div class="lang-empty">${dict.langEmpty}</div>`;
+                return;
+            }
+
+            filtered.forEach(lang => {
+                const div = document.createElement('div');
+                div.className = `lang-item ${lang.code === currentLangCode ? 'selected' : ''}`;
+
+                if (lang.code === currentLangCode) {
+                    div.innerHTML = `
+                        <span>${lang.name}</span>
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                    `;
+                } else {
+                    div.textContent = lang.name;
+                }
+
+                div.onclick = () => selectLanguage(lang.code, lang.name);
+                langListEl.appendChild(div);
+            });
+        }
+
+        function filterLanguages() { renderLanguages(langSearchInput.value); }
+
+        function scrollToSelectedLanguage() {
+            const selectedEl = langListEl.querySelector('.lang-item.selected');
+            if (!selectedEl) return;
+
+            const targetScrollTop = selectedEl.offsetTop - (langListEl.clientHeight / 2) + (selectedEl.offsetHeight / 2);
+            langListEl.scrollTop = Math.max(0, targetScrollTop);
+        }
+
+        function openLangModal() {
+            langSearchInput.value = '';
+            renderLanguages();
+            langListEl.scrollTop = 0;
+            langModalOverlay.classList.add('active');
+
+            requestAnimationFrame(() => {
+                scrollToSelectedLanguage();
+                langSearchInput.focus();
+            });
+        }
+
+        function closeLangModalBtn() { langModalOverlay.classList.remove('active'); }
+        function closeLangModal(e) { if (e.target === langModalOverlay) closeLangModalBtn(); }
+
+        function selectLanguage(code, name) {
+            currentLangCode = code;
+            currentLangBtnText.textContent = name;
+            closeLangModalBtn();
+            updateUI();
+            document.querySelectorAll('.input-group.invalid').forEach(el => el.classList.remove('invalid'));
+        }
+
+        // --- ОБНОВЛЕНИЕ ИНТЕРФЕЙСА (ПЕРЕВОД) ---
+        let currentMode = 'login';
+
+        function updateUI() {
+            const text = i18n[i18n[currentLangCode] ? currentLangCode : 'en'];
+
+            document.getElementById('langSearch').placeholder = text.searchPlace;
+            document.getElementById('lblHomeserver').textContent = text.lblHomeserver;
+            document.getElementById('txtPopularServers').textContent = text.txtPopularServers;
+            document.getElementById('lblEmail').textContent = text.lblEmail;
+            document.getElementById('lblConfirm').textContent = text.lblConfirm;
+            document.getElementById('lnkForgot').textContent = text.lnkForgot;
+
+            let hsVal = document.getElementById('homeserver').value.trim() || (currentLangCode === 'ru' ? 'ваш сервер' : 'your server');
+            document.getElementById('resetInfoBox').innerHTML = text.resetInfoHtml.replace('{hs}', hsVal);
+
+            const activeLangObj = languages.find(l => l.code === currentLangCode) || languages[30];
+            currentLangBtnText.textContent = activeLangObj.name;
+
+            setMode(currentMode);
+        }
+
+        // --- ЛОГИКА УПРАВЛЕНИЯ РЕЖИМАМИ ---
+        function toggleMainMode() {
+            document.querySelectorAll('.input-group.invalid').forEach(el => el.classList.remove('invalid'));
+            if (currentMode === 'reset' || currentMode === 'register') setMode('login');
+            else setMode('register');
+        }
+
+        function setMode(mode) {
+            currentMode = mode;
+            const text = i18n[i18n[currentLangCode] ? currentLangCode : 'en'];
+
+            const userGroup = document.getElementById('userGroup');
+            const emailGroup = document.getElementById('emailGroup');
+            const confirmPasswordGroup = document.getElementById('confirmPasswordGroup');
+            const resetInfoBox = document.getElementById('resetInfoBox');
+            const forgotLinkWrap = document.getElementById('forgotLinkWrap');
+            const passwordInput = document.getElementById('password');
+
+            userGroup.classList.remove('hidden');
+            emailGroup.classList.add('hidden');
+            confirmPasswordGroup.classList.add('hidden');
+            resetInfoBox.classList.add('hidden');
+            forgotLinkWrap.classList.add('hidden');
+
+            if (mode === 'login') {
+                forgotLinkWrap.classList.remove('hidden');
+
+                document.getElementById('lblUsername').textContent = text.lblUsernameLogin;
+                document.getElementById('lblPassword').textContent = text.lblPasswordLogin;
+                passwordInput.setAttribute('autocomplete', 'current-password');
+
+                document.getElementById('headerSubtitle').textContent = text.subLogin;
+                document.getElementById('btnText').textContent = text.btnContinue;
+                document.getElementById('secondaryBtn').textContent = text.btnSwitchReg;
+            }
+            else if (mode === 'register') {
+                emailGroup.classList.remove('hidden');
+                confirmPasswordGroup.classList.remove('hidden');
+
+                document.getElementById('lblUsername').textContent = text.lblUsernameReg;
+                document.getElementById('lblPassword').textContent = text.lblPasswordReg;
+                passwordInput.setAttribute('autocomplete', 'new-password');
+
+                document.getElementById('headerSubtitle').textContent = text.subRegister;
+                document.getElementById('btnText').textContent = text.btnRegister;
+                document.getElementById('secondaryBtn').textContent = text.btnSwitchLogin;
+            }
+            else if (mode === 'reset') {
+                userGroup.classList.add('hidden');
+
+                resetInfoBox.classList.remove('hidden');
+                emailGroup.classList.remove('hidden');
+                confirmPasswordGroup.classList.remove('hidden');
+
+                document.getElementById('lblPassword').textContent = text.lblPasswordReset;
+                passwordInput.setAttribute('autocomplete', 'new-password');
+
+                document.getElementById('headerSubtitle').textContent = text.subReset;
+                document.getElementById('btnText').textContent = text.btnReset;
+                document.getElementById('secondaryBtn').textContent = text.btnSwitchLogin;
+            }
+        }
+
+        // --- ЛОГИКА КАСТОМНОЙ ВАЛИДАЦИИ И ОШИБОК ---
+        function clearError(input) {
+            const group = input.closest('.input-group');
+            if (group) group.classList.remove('invalid');
+        }
+
+        function checkField(id, condition, msgKey) {
+            const el = document.getElementById(id);
+            const group = el.closest('.input-group');
+            const errText = group.querySelector('.error-text');
+            const text = i18n[i18n[currentLangCode] ? currentLangCode : 'en'];
+
+            if (!condition) {
+                group.classList.remove('invalid');
+                void group.offsetWidth;
+                group.classList.add('invalid');
+                errText.textContent = text[msgKey];
+                return false;
+            }
+            return true;
+        }
+
+        // --- ЛОГИКА HOMESERVER ---
+        const hsGroup = document.getElementById('hsGroup');
+        const homeserverInput = document.getElementById('homeserver');
+
+        function openDropdown() { hsGroup.classList.add('open'); }
+        function closeDropdown() { hsGroup.classList.remove('open'); }
+
+        function toggleDropdown(e) {
+            e.stopPropagation();
+            if (hsGroup.classList.contains('open')) closeDropdown();
+            else { openDropdown(); homeserverInput.focus(); }
+        }
+
+        function handleInput(input) {
+            clearError(input);
+            openDropdown();
+            updateResetText();
+        }
+
+        function selectServer(server) {
+            homeserverInput.value = server;
+            clearError(homeserverInput);
+            closeDropdown();
+            updateResetText();
+            if(currentMode !== 'reset') document.getElementById('username').focus();
+        }
+
+        document.addEventListener('click', (e) => {
+            if (!hsGroup.contains(e.target)) closeDropdown();
+        });
+
+        function updateResetText() {
+            const span = document.getElementById('resetHsName');
+            if (span) {
+                span.textContent = homeserverInput.value.trim() || (currentLangCode === 'ru' ? 'ваш сервер' : 'your server');
+            }
+        }
+
+        // --- ЛОГИКА ПАРОЛЯ (ГЛАЗИК) ---
+        function togglePasswordVisibility(inputId, btn) {
+            const input = document.getElementById(inputId);
+            if (input.type === 'password') {
+                input.type = 'text';
+                btn.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+            } else {
+                input.type = 'password';
+                btn.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22"></path></svg>`;
+            }
+        }
+
+        // --- СВЯЗЬ С ОСНОВНЫМ MATRIX-КЛИЕНТОМ ---
+        function setSubmitLoading(isLoading) {
+            const primaryBtn = document.getElementById('primaryBtn');
+            const secondaryBtn = document.getElementById('secondaryBtn');
+            const btnText = document.getElementById('btnText');
+            const btnSpinner = document.getElementById('btnSpinner');
+
+            btnText.style.display = isLoading ? 'none' : 'block';
+            btnSpinner.style.display = isLoading ? 'block' : 'none';
+            primaryBtn.style.pointerEvents = isLoading ? 'none' : 'auto';
+            secondaryBtn.style.pointerEvents = isLoading ? 'none' : 'auto';
+        }
+
+        function showServerError(message) {
+            const node = document.getElementById('authServerError');
+            if (!node) return;
+            node.textContent = message || '';
+            node.classList.toggle('show', Boolean(message));
+        }
+
+        function submitAuthToParent(authData) {
+            showServerError('');
+
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({
+                    type: 'matrix-auth-submit',
+                    payload: authData,
+                }, '*');
+                return;
+            }
+
+            setTimeout(() => {
+                setSubmitLoading(false);
+                showServerError('Эта форма ожидает запуск внутри Matrix-клиента.');
+            }, 250);
+        }
+
+        window.addEventListener('message', (event) => {
+            const data = event.data;
+            if (!data || typeof data !== 'object') return;
+
+            if (data.type === 'matrix-auth-init') {
+                const payload = data.payload || {};
+
+                if (typeof payload.brand === 'string' && payload.brand.trim()) {
+                    document.title = `${payload.brand} — Авторизация`;
+                    const brandNode = document.querySelector('.auth-header h1');
+                    if (brandNode) brandNode.textContent = payload.brand;
+                }
+
+                if (typeof payload.homeserver === 'string' && payload.homeserver.trim()) {
+                    homeserverInput.value = payload.homeserver
+                        .replace(/^https?:\/\//i, '')
+                        .replace(/\/$/, '');
+                    updateResetText();
+                    refreshAutofillStyles();
+                }
+
+                if (payload.mode === 'login' || payload.mode === 'register' || payload.mode === 'reset') {
+                    setMode(payload.mode);
+                }
+                return;
+            }
+
+            if (data.type === 'matrix-auth-result') {
+                setSubmitLoading(false);
+                showServerError(data.success ? '' : (data.message || 'Ошибка авторизации.'));
+            }
+        });
+
+        // --- САБМИТ ФОРМЫ (С КАСТОМНОЙ ВАЛИДАЦИЕЙ) ---
+        function handleAuth(e) {
+            e.preventDefault();
+            showServerError('');
+
+            let isValid = true;
+
+            let hs = homeserverInput.value.trim();
+            if (!checkField('homeserver', hs.length > 0, 'errRequired')) isValid = false;
+
+            if (currentMode !== 'reset') {
+                const userVal = document.getElementById('username').value.trim();
+                if (!checkField('username', userVal.length > 0, 'errRequired')) isValid = false;
+            }
+
+            if (currentMode !== 'login') {
+                const emailVal = document.getElementById('email').value.trim();
+                const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal);
+                if (emailVal.length === 0) {
+                    if (!checkField('email', false, 'errRequired')) isValid = false;
+                } else if (!checkField('email', isEmailValid, 'errEmail')) {
+                    isValid = false;
+                }
+            }
+
+            const passwordInput = document.getElementById('password');
+            const confirmPasswordInput = document.getElementById('confirmPassword');
+
+            if (currentMode === 'login') {
+                if (!checkField('password', passwordInput.value.length > 0, 'errRequired')) isValid = false;
+            } else {
+                const pValid = checkField('password', passwordInput.value.length > 0, 'errRequired');
+                if (!pValid) isValid = false;
+
+                if (pValid) {
+                    if (confirmPasswordInput.value.length === 0) {
+                        if (!checkField('confirmPassword', false, 'errRequired')) isValid = false;
+                    } else if (!checkField('confirmPassword', passwordInput.value === confirmPasswordInput.value, 'errPasswordMatch')) {
+                        isValid = false;
+                    }
+                }
+            }
+
+            if (!isValid) return;
+
+            if (!hs.startsWith('http')) { hs = 'https://' + hs; }
+
+            setSubmitLoading(true);
+
+            const authData = {
+                action: currentMode,
+                mode: currentMode,
+                homeserver: hs,
+                username: currentMode !== 'reset' ? document.getElementById('username').value : undefined,
+                email: currentMode !== 'login' ? document.getElementById('email').value : undefined,
+                password: passwordInput.value
+            };
+
+            submitAuthToParent(authData);
+        }
+
+        function refreshAutofillStyles() {
+            const rootStyles = getComputedStyle(document.documentElement);
+            const textColor = rootStyles.getPropertyValue('--text-main').trim() || '#ffffff';
+            const bgColor = rootStyles.getPropertyValue('--bg-base').trim() || '#0b0b0d';
+            const fontFamily = rootStyles.getPropertyValue('--font-family').trim() || 'Manrope, sans-serif';
+
+            document.querySelectorAll('.input-field').forEach(input => {
+                input.style.color = textColor;
+                input.style.webkitTextFillColor = textColor;
+                input.style.textShadow = `0 0 0 ${textColor}`;
+                input.style.fontFamily = fontFamily;
+                input.style.backgroundColor = bgColor;
+                input.style.backgroundImage = 'none';
+            });
+        }
+
+        window.addEventListener('load', () => {
+            refreshAutofillStyles();
+            setTimeout(refreshAutofillStyles, 0);
+            setTimeout(refreshAutofillStyles, 120);
+            setTimeout(refreshAutofillStyles, 300);
+        });
+
+        window.addEventListener('pageshow', () => {
+            refreshAutofillStyles();
+            setTimeout(refreshAutofillStyles, 0);
+            setTimeout(refreshAutofillStyles, 120);
+            setTimeout(refreshAutofillStyles, 300);
+        });
+
+        document.addEventListener('focusin', (e) => {
+            if (e.target.classList && e.target.classList.contains('input-field')) {
+                refreshAutofillStyles();
+            }
+        });
+
+        document.addEventListener('input', (e) => {
+            if (e.target.classList && e.target.classList.contains('input-field')) {
+                refreshAutofillStyles();
+            }
+        });
+
+        document.addEventListener('change', (e) => {
+            if (e.target.classList && e.target.classList.contains('input-field')) {
+                refreshAutofillStyles();
+            }
+        });
+
+        updateUI();
+        refreshAutofillStyles();
+    </script>
+</body>
+</html>

@@ -59,6 +59,7 @@ const refs = {
     statusBanner: document.getElementById("statusBanner"),
 
     authScreen: document.getElementById("authScreen"),
+    authFrame: document.getElementById("authFrame"),
     authForm: document.getElementById("authForm"),
     authTabs: Array.from(document.querySelectorAll(".auth-tab")),
     authHomeserver: document.getElementById("authHomeserver"),
@@ -164,7 +165,8 @@ async function init() {
 
     const session = loadJson(STORAGE_KEYS.session, null);
     if (session?.accessToken && session?.userId && session?.baseUrl) {
-        refs.authHomeserver.value = session.baseUrl;
+        if (refs.authHomeserver) refs.authHomeserver.value = session.baseUrl;
+        syncEmbeddedAuth({ homeserver: session.baseUrl, mode: state.authMode });
         try {
             await startSession(session, { restoring: true });
             return;
@@ -183,7 +185,13 @@ function bindStaticEvents() {
         button.addEventListener("click", () => updateAuthMode(button.dataset.authMode || "login"));
     });
 
-    refs.authForm.addEventListener("submit", handleAuthSubmit);
+    refs.authForm?.addEventListener("submit", handleAuthSubmit);
+    refs.authFrame?.addEventListener("load", () => syncEmbeddedAuth({
+        homeserver: state.session?.baseUrl || "",
+        mode: state.authMode,
+        enableCrypto: state.settings.enableCrypto,
+    }));
+    window.addEventListener("message", handleAuthFrameMessage);
 
     refs.navItems.forEach((item) => {
         item.addEventListener("click", () => switchTab(item.dataset.tab || "chats"));
@@ -284,10 +292,11 @@ function bindStaticEvents() {
 function updateAuthMode(mode) {
     state.authMode = mode;
     refs.authTabs.forEach((button) => button.classList.toggle("active", button.dataset.authMode === mode));
-    refs.authDisplayNameField.classList.toggle("hidden", mode !== "register");
-    refs.authSubmit.textContent = mode === "register" ? "Создать аккаунт" : "Войти";
-    refs.authPassword.autocomplete = mode === "register" ? "new-password" : "current-password";
-    refs.authError.classList.add("hidden");
+    refs.authDisplayNameField?.classList.toggle("hidden", mode !== "register");
+    if (refs.authSubmit) refs.authSubmit.textContent = mode === "register" ? "Создать аккаунт" : "Войти";
+    if (refs.authPassword) refs.authPassword.autocomplete = mode === "register" ? "new-password" : "current-password";
+    refs.authError?.classList.add("hidden");
+    syncEmbeddedAuth({ mode, enableCrypto: state.settings.enableCrypto });
 }
 
 function showAuth() {
@@ -295,6 +304,11 @@ function showAuth() {
     refs.appShell.classList.add("hidden");
     refs.body.classList.remove("modal-open");
     setSyncVisualState("");
+    syncEmbeddedAuth({
+        homeserver: state.session?.baseUrl || "",
+        mode: state.authMode,
+        enableCrypto: state.settings.enableCrypto,
+    });
 }
 
 function showApp() {
@@ -459,73 +473,142 @@ function updateModalContent(title, subtitle = "", html = "") {
     refs.modalBody.scrollTop = 0;
 }
 
-async function handleAuthSubmit(event) {
-    event.preventDefault();
-    refs.authError.classList.add("hidden");
-    refs.authSubmit.disabled = true;
-    refs.authSubmit.dataset.loading = "true";
-    refs.authSubmit.textContent = state.authMode === "register" ? "Создаю аккаунт…" : "Вхожу…";
+function syncEmbeddedAuth(data = {}) {
+    if (!refs.authFrame?.contentWindow) return;
+    refs.authFrame.contentWindow.postMessage({
+        type: "matrix-auth-init",
+        payload: {
+            brand: APP_NAME,
+            homeserver: data.homeserver || state.session?.baseUrl || "",
+            mode: data.mode || state.authMode,
+            enableCrypto: data.enableCrypto ?? state.settings.enableCrypto,
+        },
+    }, "*");
+}
 
-    const baseUrl = normalizeHomeserver(refs.authHomeserver.value.trim());
-    const usernameRaw = refs.authUsername.value.trim();
-    const password = refs.authPassword.value;
-    const displayName = refs.authDisplayName.value.trim();
-    const enableCrypto = refs.authEnableCrypto.checked;
+function sendAuthFrameResult(success, message = "") {
+    if (!refs.authFrame?.contentWindow) return;
+    refs.authFrame.contentWindow.postMessage({
+        type: "matrix-auth-result",
+        success,
+        message,
+    }, "*");
+}
+
+async function handleAuthFrameMessage(event) {
+    if (event.source !== refs.authFrame?.contentWindow) return;
+    const data = event.data;
+    if (!data || typeof data !== "object") return;
+    if (data.type !== "matrix-auth-submit") return;
 
     try {
-        if (!baseUrl) throw new Error("Укажи валидный homeserver URL.");
-        if (!usernameRaw) throw new Error("Укажи логин или Matrix ID.");
-        if (!password) throw new Error("Укажи пароль.");
-
-        const tempClient = sdk.createClient({ baseUrl });
-        let response;
-
-        if (state.authMode === "register") {
-            const localpart = usernameToLocalpart(usernameRaw);
-            response = await tempClient.registerRequest({
-                username: localpart,
-                password,
-                initial_device_display_name: APP_NAME,
-                inhibit_login: false,
-                refresh_token: true,
-            });
-        } else {
-            const identifierUser = usernameRaw.startsWith("@") ? usernameRaw : usernameToLocalpart(usernameRaw);
-            response = await tempClient.loginRequest({
-                type: "m.login.password",
-                identifier: { type: "m.id.user", user: identifierUser },
-                user: identifierUser,
-                password,
-                initial_device_display_name: APP_NAME,
-                refresh_token: true,
-            });
-        }
-
-        const session = {
-            baseUrl,
-            userId: response.user_id,
-            accessToken: response.access_token,
-            deviceId: response.device_id,
-            refreshToken: response.refresh_token || null,
-            enableCrypto,
-        };
-
-        saveJson(STORAGE_KEYS.session, session);
-        await startSession(session);
-
-        if (displayName && state.authMode === "register") {
-            await state.client?.setDisplayName?.(displayName);
-        }
-
-        showStatus(state.authMode === "register" ? "Аккаунт создан и сессия активна." : "Вход выполнен.");
+        await performAuth(data.payload || {});
+        sendAuthFrameResult(true);
     } catch (error) {
         const message = parseError(error);
-        refs.authError.textContent = message;
-        refs.authError.classList.remove("hidden");
+        sendAuthFrameResult(false, message);
+    }
+}
+
+async function performAuth(payload = {}) {
+    const mode = payload.mode === "register" ? "register" : payload.mode === "login" ? "login" : payload.action;
+    const baseUrl = normalizeHomeserver(String(payload.homeserver || "").trim());
+    const usernameRaw = String(payload.username || "").trim();
+    const password = String(payload.password || "");
+    const displayName = String(payload.displayName || payload.name || "").trim();
+    const enableCrypto = payload.enableCrypto ?? refs.authEnableCrypto?.checked ?? state.settings.enableCrypto;
+
+    if (mode !== "login" && mode !== "register") {
+        throw new Error("Сброс пароля в этом web-клиенте пока не подключён.");
+    }
+
+    if (!baseUrl) throw new Error("Укажи валидный homeserver URL.");
+    if (!usernameRaw) throw new Error("Укажи логин или Matrix ID.");
+    if (!password) throw new Error("Укажи пароль.");
+
+    updateAuthMode(mode);
+    setSettings({ enableCrypto: Boolean(enableCrypto) });
+
+    const tempClient = sdk.createClient({ baseUrl });
+    let response;
+
+    if (mode === "register") {
+        const localpart = usernameToLocalpart(usernameRaw);
+        response = await tempClient.registerRequest({
+            username: localpart,
+            password,
+            initial_device_display_name: APP_NAME,
+            inhibit_login: false,
+            refresh_token: true,
+        });
+    } else {
+        const identifierUser = usernameRaw.startsWith("@") ? usernameRaw : usernameToLocalpart(usernameRaw);
+        response = await tempClient.loginRequest({
+            type: "m.login.password",
+            identifier: { type: "m.id.user", user: identifierUser },
+            user: identifierUser,
+            password,
+            initial_device_display_name: APP_NAME,
+            refresh_token: true,
+        });
+    }
+
+    const session = {
+        baseUrl,
+        userId: response.user_id,
+        accessToken: response.access_token,
+        deviceId: response.device_id,
+        refreshToken: response.refresh_token || null,
+        enableCrypto: Boolean(enableCrypto),
+    };
+
+    saveJson(STORAGE_KEYS.session, session);
+    await startSession(session);
+
+    if (displayName && mode === "register") {
+        await state.client?.setDisplayName?.(displayName);
+    }
+
+    showStatus(mode === "register" ? "Аккаунт создан и сессия активна." : "Вход выполнен.");
+}
+
+async function handleAuthSubmit(event) {
+    event.preventDefault();
+
+    const baseUrl = refs.authHomeserver?.value?.trim?.() || "";
+    const usernameRaw = refs.authUsername?.value?.trim?.() || "";
+    const password = refs.authPassword?.value || "";
+    const displayName = refs.authDisplayName?.value?.trim?.() || "";
+    const enableCrypto = refs.authEnableCrypto?.checked ?? state.settings.enableCrypto;
+
+    refs.authError?.classList.add("hidden");
+    if (refs.authSubmit) {
+        refs.authSubmit.disabled = true;
+        refs.authSubmit.dataset.loading = "true";
+        refs.authSubmit.textContent = state.authMode === "register" ? "Создаю аккаунт…" : "Вхожу…";
+    }
+
+    try {
+        await performAuth({
+            mode: state.authMode,
+            homeserver: baseUrl,
+            username: usernameRaw,
+            password,
+            displayName,
+            enableCrypto,
+        });
+    } catch (error) {
+        const message = parseError(error);
+        if (refs.authError) {
+            refs.authError.textContent = message;
+            refs.authError.classList.remove("hidden");
+        }
     } finally {
-        refs.authSubmit.disabled = false;
-        refs.authSubmit.dataset.loading = "false";
-        refs.authSubmit.textContent = state.authMode === "register" ? "Создать аккаунт" : "Войти";
+        if (refs.authSubmit) {
+            refs.authSubmit.disabled = false;
+            refs.authSubmit.dataset.loading = "false";
+            refs.authSubmit.textContent = state.authMode === "register" ? "Создать аккаунт" : "Войти";
+        }
     }
 }
 
@@ -768,7 +851,8 @@ function syncSettingsUI() {
     refs.settingReadReceipts.checked = Boolean(state.settings.sendReadReceipts);
     refs.settingTyping.checked = Boolean(state.settings.sendTyping);
     refs.settingCompactMode.checked = Boolean(state.settings.compactMode);
-    refs.authEnableCrypto.checked = Boolean(state.settings.enableCrypto);
+    if (refs.authEnableCrypto) refs.authEnableCrypto.checked = Boolean(state.settings.enableCrypto);
+    syncEmbeddedAuth({ enableCrypto: state.settings.enableCrypto, mode: state.authMode });
 }
 
 function renderSettings() {

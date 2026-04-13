@@ -8,50 +8,16 @@
 </head>
 <body>
     <div class="status-banner hidden" id="statusBanner" role="status" aria-live="polite"></div>
-
-    <section class="auth-screen" id="authScreen">
-        <div class="auth-card">
-            <div class="auth-brand">
-                <div class="auth-logo">E2</div>
-                <div>
-                    <h1>e2e.mom</h1>
-                    <p>Matrix web client для <strong>e2e.mom</strong> в зрелом тёмном Telegram-like стиле без glow, glass и визуального шума.</p>
-                </div>
-            </div>
-
-            <div class="auth-tabs">
-                <button class="auth-tab active" data-auth-mode="login" type="button">Вход</button>
-                <button class="auth-tab" data-auth-mode="register" type="button">Регистрация</button>
-            </div>
-
-            <form class="auth-form" id="authForm">
-                <label class="field">
-                    <span>Homeserver URL</span>
-                    <input id="authHomeserver" type="url" placeholder="https://matrix.org" autocomplete="url" required>
-                </label>
-                <label class="field">
-                    <span>Логин / Matrix ID</span>
-                    <input id="authUsername" type="text" placeholder="@user:server или localpart" autocomplete="username" required>
-                </label>
-                <label class="field">
-                    <span>Пароль</span>
-                    <input id="authPassword" type="password" placeholder="••••••••" autocomplete="current-password" required>
-                </label>
-                <label class="field hidden" id="authDisplayNameField">
-                    <span>Display name</span>
-                    <input id="authDisplayName" type="text" placeholder="Как вас показывать в клиентах">
-                </label>
-                <label class="toggle-row compact">
-                    <input id="authEnableCrypto" type="checkbox" checked>
-                    <span>Включить E2EE / key backup</span>
-                </label>
-                <div class="auth-error hidden" id="authError"></div>
-                <button class="primary-btn block" id="authSubmit" type="submit">Войти</button>
-            </form>
-
-            <div class="auth-footnote">
-                Для чтения старых зашифрованных сообщений у устройства должен быть доступ к key backup: через secret storage, recovery key или passphrase.
-            </div>
+    <section class="auth-screen auth-screen--frame" id="authScreen">
+        <div class="auth-frame-shell">
+            <iframe
+                class="auth-login-frame"
+                id="authFrame"
+                src="./login.html"
+                title="Matrix auth"
+                loading="eager"
+                referrerpolicy="same-origin"
+            ></iframe>
         </div>
     </section>
 
